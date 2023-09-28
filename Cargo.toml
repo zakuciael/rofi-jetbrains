@@ -13,3 +13,8 @@ keywords = ["rofi", "plugin", "rofi-plugin", "jetbrains"]
 crate-type = ["cdylib"]
 
 [dependencies]
+glib = { version = "0.18.2", features = ["log_macros"] }
+libc = "0.2.148"
+log = "0.4.20"
+resolve-path = "0.1.0"
+rofi-mode = "0.3.1"
