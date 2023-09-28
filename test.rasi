@@ -1,0 +1,7 @@
+configuration {
+    modi: "jetbrains";
+    jetbrains-test: "ABCD";
+    jetbrains-shell-scripts-path: "~/.local/share/JetBrains/Toolbox/scripts";
+    jetbrains-configs-path: "~/.config/JetBrains";
+    jetbrains-android-studio-config-path: "~/.config/Google";
+}
