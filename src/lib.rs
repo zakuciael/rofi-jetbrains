@@ -29,9 +29,12 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
     log::set_max_level(LevelFilter::Debug);
     debug!("Initializing..");
 
+    debug!("Parsing config file...");
+    let config = Config::default();
+
     Ok(Self {
       api,
-      config: Config::default(),
+      config,
       entries: vec!["Test str".to_string()],
     })
   }
