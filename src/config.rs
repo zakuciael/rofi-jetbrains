@@ -69,38 +69,49 @@ impl ConfigBuilder {
       ROFI_CONFIG_PREFIX.to_owned() + "android-studio-config-path";
     let ide_aliases_key = ROFI_CONFIG_PREFIX.to_owned() + "ide-aliases";
 
-    let shell_scripts_path = config_parse_option::<String>(&shell_scripts_path_key, "Test")
-      .map(PathBuf::from)
-      .map(|path| {
-        let path = path.resolve();
-        if !path.is_dir() {
-          error!("Invalid \"{shell_scripts_path_key}\" config value, not a valid directory");
-          panic!();
-        }
+    let shell_scripts_path = config_parse_option::<String>(
+      &shell_scripts_path_key,
+      "A path to the JetBrains IDE shell scripts directory",
+    )
+    .map(PathBuf::from)
+    .map(|path| {
+      let path = path.resolve();
+      if !path.is_dir() {
+        error!("Invalid \"{shell_scripts_path_key}\" config value, not a valid directory");
+        panic!();
+      }
 
-        path.to_path_buf()
-      });
-    let configs_path = config_parse_option::<String>(&configs_path_key, "Test")
-      .map(PathBuf::from)
-      .map(|path| {
-        let path = path.resolve();
-        if !path.is_dir() {
-          error!("Invalid \"{configs_path_key}\" config value, not a valid directory");
-          panic!();
-        }
+      path.to_path_buf()
+    });
+    let configs_path = config_parse_option::<String>(
+      &configs_path_key,
+      "A path to the JetBrains IDE configs directory",
+    )
+    .map(PathBuf::from)
+    .map(|path| {
+      let path = path.resolve();
+      if !path.is_dir() {
+        error!("Invalid \"{configs_path_key}\" config value, not a valid directory");
+        panic!();
+      }
 
-        path.to_path_buf()
-      });
-    let android_studio_config_path =
-      config_parse_option::<String>(&android_studio_config_path_key, "Test")
-        .map(PathBuf::from)
-        .map(|path| path.resolve().to_path_buf());
+      path.to_path_buf()
+    });
+    let android_studio_config_path = config_parse_option::<String>(
+      &android_studio_config_path_key,
+      "A path to the Android Studio config directory",
+    )
+    .map(PathBuf::from)
+    .map(|path| path.resolve().to_path_buf());
 
     // TODO: Implement parsing for raw aliases
-    let ide_aliases = config_parse_option::<String>(&ide_aliases_key, "Test").map(|raw| {
-      debug!("Found raw aliases: {:?}", raw);
-      vec![]
-    });
+    let ide_aliases =
+      config_parse_option::<String>(&ide_aliases_key, "A comma-separated list of IDE aliases").map(
+        |raw| {
+          debug!("Found raw aliases: {:?}", raw);
+          vec![]
+        },
+      );
 
     self.shell_scripts_path = shell_scripts_path.or(self.shell_scripts_path);
     self.configs_path = configs_path.or(self.configs_path);
