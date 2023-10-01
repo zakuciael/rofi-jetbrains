@@ -3,8 +3,10 @@ use log::LevelFilter;
 use rofi_mode::{export_mode, Action, Api, Event, Matcher};
 
 use crate::config::Config;
+use crate::error::UnwrapOrError;
 
 mod config;
+mod error;
 mod rofi;
 mod traits;
 
@@ -25,9 +27,13 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
   const NAME: &'static str = "jetbrains\0";
 
   fn init(api: Api<'rofi>) -> Result<Self, ()> {
-    log::set_logger(&GLIB_LOGGER).map_err(|_| ())?;
+    log::set_logger(&GLIB_LOGGER)
+      .unwrap_or_else(|_| panic!("Another instance of the logger is already initialized"));
     log::set_max_level(LevelFilter::Debug);
-    debug!("Initializing..");
+    debug!("Starting..");
+
+    debug!("Parsing config options...");
+    let config = Config::from_rofi();
 
     debug!("Parsing config file...");
     let config = Config::default();
