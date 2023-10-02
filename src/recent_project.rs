@@ -3,10 +3,12 @@ use std::fs::read_to_string;
 use std::path::{Path, PathBuf};
 
 use amxml::dom::{new_document, NodePtr};
+use chrono::{DateTime, Local, NaiveDateTime};
 use glib::warn;
 use resolve_path::PathResolveExt;
 
 use crate::error::UnwrapOrError;
+use crate::ide::IDE;
 use crate::G_LOG_DOMAIN;
 
 static BASE_PATHS: [&str; 4] = [
@@ -27,10 +29,11 @@ static IDE_CODE_PATH: &str = "value/RecentProjectMetaInfo/option[@name=\"product
 
 #[derive(Debug, Eq, PartialEq, Hash)]
 pub struct RecentProject {
-  name: String,
-  path: PathBuf,
-  icon: Option<PathBuf>,
-  ide_code: String,
+  pub name: String,
+  pub path: PathBuf,
+  pub icon: Option<PathBuf>,
+  pub ide: IDE,
+  pub last_opened: DateTime<Local>,
 }
 
 #[derive(Debug)]
@@ -64,6 +67,7 @@ impl Iterator for RecentProjectsParser {
   type Item = RecentProject;
 
   fn next(&mut self) -> Option<Self::Item> {
+    // TODO: Implement resolver for the last opened time
     let raw_node = match self.nodes.pop_front() {
       Some(v) => v,
       None => return None,
@@ -136,6 +140,37 @@ impl Iterator for RecentProjectsParser {
       }
     };
 
+    // Resolve IDE info from project's IDE code
+    let ide = match IDE::from_code(&ide_code) {
+      Some(v) => v,
+      None => {
+        warn!("Ignoring entry {raw_node:?}, unknown IDE code: {ide_code}");
+        return None;
+      }
+    };
+
+    let last_opened = raw_node
+      .get_first_node(LAST_OPENED_TIMESTAMP_PATH)
+      .and_then(|node| node.attribute_value("value"))
+      .map(|raw| raw.parse::<i64>().ok())
+      .and_then(|timestamp| {
+        timestamp.map(|timestamp| {
+          NaiveDateTime::from_timestamp_millis(timestamp)
+            .as_ref()
+            .map(NaiveDateTime::and_utc)
+            .map(|utc| utc.with_timezone(&Local))
+        })
+      })
+      .flatten();
+
+    let last_opened = match last_opened {
+      Some(v) => v,
+      None => {
+        warn!("Failed to extract last opened time from XML node: {raw_node:?}");
+        return None;
+      }
+    };
+
     // Search for project's icon in project path and handle errors while building a matcher
     let icon = match globmatch::Builder::new(".idea/icon.*").build(&path) {
       Ok(matcher) => matcher.into_iter().flatten().next(),
@@ -149,7 +184,8 @@ impl Iterator for RecentProjectsParser {
       name,
       path,
       icon,
-      ide_code,
+      ide,
+      last_opened,
     })
   }
 }

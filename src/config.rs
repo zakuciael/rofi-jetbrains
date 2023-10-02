@@ -15,6 +15,8 @@ pub struct Config {
 
 impl Config {
   pub fn from_rofi() -> Self {
+    // TODO: Add configuration option for installation path
+    // TODO: Add configuration option for IDE aliases
     let shell_scripts_path = config_parse_option::<String>(
       &(ROFI_CONFIG_PREFIX.to_owned() + "shell-scripts-path"),
       "A path to the JetBrains IDE shell scripts directory",
