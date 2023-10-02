@@ -3,7 +3,7 @@ use std::fs::read_to_string;
 use std::path::{Path, PathBuf};
 
 use amxml::dom::{new_document, NodePtr};
-use glib::debug;
+use glib::warn;
 use resolve_path::PathResolveExt;
 
 use crate::error::UnwrapOrError;
@@ -86,7 +86,7 @@ impl Iterator for RecentProjectsParser {
     let path = match path {
       Some(v) => v,
       None => {
-        debug!("Failed to resolve project path for entry: {raw_node:?}");
+        warn!("Failed to resolve project path from XML node: {raw_node:?}");
         return None;
       }
     };
@@ -94,11 +94,11 @@ impl Iterator for RecentProjectsParser {
     // Handle project's path validation
     match path.try_exists() {
       Ok(false) => {
-        debug!("Ignoring entry {raw_node:?}, path no longer exists");
+        warn!("Ignoring XML node {raw_node:?}, path doesn't exists");
         return None;
       }
       Err(_) => {
-        debug!("Ignoring entry {raw_node:?}, insufficient permissions to access the path");
+        warn!("Ignoring XML node {raw_node:?}, insufficient permissions to access the path");
         return None;
       }
       _ => {}
@@ -119,7 +119,7 @@ impl Iterator for RecentProjectsParser {
     let name = match name {
       Some(v) => v,
       None => {
-        debug!("Failed to resolve project name for entry: {raw_node:?}");
+        warn!("Failed to resolve project name from XML node: {raw_node:?}");
         return None;
       }
     };
@@ -131,7 +131,7 @@ impl Iterator for RecentProjectsParser {
     {
       Some(v) => v,
       None => {
-        debug!("Failed to resolve IDE for entry: {raw_node:?}");
+        warn!("Failed to extract IDE code from XML node: {raw_node:?}");
         return None;
       }
     };
@@ -140,7 +140,7 @@ impl Iterator for RecentProjectsParser {
     let icon = match globmatch::Builder::new(".idea/icon.*").build(&path) {
       Ok(matcher) => matcher.into_iter().flatten().next(),
       Err(_) => {
-        debug!("Failed to build glob matcher for entry: {raw_node:?}");
+        warn!("Failed to build glob matcher for XML node: {raw_node:?}");
         None
       }
     };
