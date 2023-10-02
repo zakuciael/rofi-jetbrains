@@ -13,7 +13,9 @@ keywords = ["rofi", "plugin", "rofi-plugin", "jetbrains"]
 crate-type = ["cdylib"]
 
 [dependencies]
+amxml = "0.5.3"
 glib = { version = "0.18.2", features = ["log_macros"] }
+globmatch = "0.2.5"
 libc = "0.2.148"
 log = "0.4.20"
 resolve-path = "0.1.0"

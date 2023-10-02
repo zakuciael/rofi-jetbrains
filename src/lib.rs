@@ -1,12 +1,16 @@
+use std::collections::HashSet;
+
 use glib::{debug, GlibLogger, GlibLoggerDomain, GlibLoggerFormat};
 use log::LevelFilter;
 use rofi_mode::{export_mode, Action, Api, Event, Matcher};
 
 use crate::config::Config;
 use crate::error::UnwrapOrError;
+use crate::recent_project::RecentProjectsParser;
 
 mod config;
 mod error;
+mod recent_project;
 mod rofi;
 mod traits;
 
@@ -35,8 +39,22 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
     debug!("Parsing config options...");
     let config = Config::from_rofi();
 
-    debug!("Parsing config file...");
-    let config = Config::default();
+    debug!("Searching for recent project..");
+    let result = globmatch::Builder::new("./**/options/{recentProjects,recentSolutions}.xml")
+      .build(&config.configs_path)
+      .unwrap_or_error("Unable to find recent projects, invalid config path specified")?;
+
+    let entries = result
+      .into_iter()
+      .flatten()
+      .flat_map(|entry| {
+        debug!("Reading recent projects XML file {entry:?}..");
+        RecentProjectsParser::from_file(entry)
+      })
+      .flatten()
+      .collect::<HashSet<_>>();
+
+    debug!("{:?}", entries);
 
     Ok(Self {
       api,
