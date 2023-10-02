@@ -64,6 +64,7 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
           .flatten()
       })
       .dedup()
+      .sorted_by(|a, b| Ord::cmp(&b.last_opened, &a.last_opened))
       .collect::<Vec<_>>();
 
     Ok(Self {
