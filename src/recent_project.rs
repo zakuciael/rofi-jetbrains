@@ -4,12 +4,11 @@ use std::path::{Path, PathBuf};
 
 use amxml::dom::{new_document, NodePtr};
 use chrono::{DateTime, Local, NaiveDateTime};
-use glib::warn;
 use resolve_path::PathResolveExt;
 
-use crate::error::UnwrapOrError;
+use crate::error::MapToErrorLog;
 use crate::ide::IDE;
-use crate::G_LOG_DOMAIN;
+use crate::macros::ensure;
 
 static BASE_PATHS: [&str; 4] = [
   ".//component[@name=\"RecentProjectsManager\"][1]",
@@ -43,9 +42,9 @@ pub struct RecentProjectsParser {
 
 impl RecentProjectsParser {
   pub fn from_file<T: AsRef<Path>>(path: T) -> Result<RecentProjectsParser, ()> {
-    let xml = read_to_string(path).unwrap_or_error("Failed to read recent projects XML file")?;
+    let xml = read_to_string(path).map_to_error_log("Failed to read recent projects XML file")?;
     let document =
-      new_document(&xml).unwrap_or_error("Failed to parse recent projects XML file")?;
+      new_document(&xml).map_to_error_log("Failed to parse recent projects XML file")?;
     let root = document.root_element();
 
     let nodes = BASE_PATHS
@@ -64,128 +63,108 @@ impl RecentProjectsParser {
 }
 
 impl Iterator for RecentProjectsParser {
-  type Item = RecentProject;
+  type Item = Result<RecentProject, String>;
 
   fn next(&mut self) -> Option<Self::Item> {
-    // TODO: Implement resolver for the last opened time
     let raw_node = match self.nodes.pop_front() {
       Some(v) => v,
       None => return None,
     };
 
-    // Extract project's path from the XML node
-    let path = raw_node
-      .attribute_value("value")
-      .or(raw_node.attribute_value("key"))
-      .map(|raw_path| raw_path.replace("$USER_HOME$", "~").resolve().to_path_buf())
-      .and_then(|project_path| {
-        if project_path.is_file() {
-          project_path.parent().map(Path::to_path_buf)
-        } else {
-          Some(project_path)
-        }
-      });
+    let mut name: Option<String> = None;
 
-    // Handle errors while extracting project's path
-    let path = match path {
-      Some(v) => v,
-      None => {
-        warn!("Failed to resolve project path from XML node: {raw_node:?}");
-        return None;
-      }
-    };
+    // Extract project's path and optionally its name (from the .sln file)
+    let path = ensure!(
+      raw_node
+        .attribute_value("value")
+        .or(raw_node.attribute_value("key"))
+        .map(|raw_path| raw_path.replace("$USER_HOME$", "~").resolve().to_path_buf())
+        .and_then(|path| {
+          if path.is_file() {
+            name = path
+              .file_stem()
+              .map(|name| name.to_string_lossy().to_string());
+            path.parent().map(Path::to_path_buf)
+          } else {
+            Some(path)
+          }
+        }),
+      "Failed to resolve project path from XML node: {raw_node:?}"
+    );
 
-    // Handle project's path validation
+    // Validate if project's path exists
     match path.try_exists() {
       Ok(false) => {
-        warn!("Ignoring XML node {raw_node:?}, path doesn't exists");
-        return None;
+        return Some(Err(format!(
+          "Ignoring XML node {raw_node:?}, path doesn't exists"
+        )));
       }
       Err(_) => {
-        warn!("Ignoring XML node {raw_node:?}, insufficient permissions to access the path");
-        return None;
+        return Some(Err(format!(
+          "Ignoring XML node {raw_node:?}, insufficient permissions to access the path"
+        )));
       }
       _ => {}
     }
 
-    // Resolve project's name using project's path
-    let name_file = path.join(".idea/.name");
-    let name = if name_file.is_file() {
-      read_to_string(name_file)
-        .ok()
-        .map(|raw_name| raw_name.replace('\n', ""))
-        .or(path.file_name().map(|v| v.to_string_lossy().to_string()))
-    } else {
-      path.file_name().map(|v| v.to_string_lossy().to_string())
-    };
+    // Resolve project's name
+    let name = ensure!(
+      match read_to_string(path.join(".idea/.name")) {
+        Ok(raw_name) => Some(raw_name.replace('\n', "")),
+        Err(_) => {
+          name.or_else(|| path.file_name().map(|v| v.to_string_lossy().to_string()))
+        }
+      },
+      "Failed to resolve project name from XML node: {raw_node:?}"
+    );
 
-    // Handle errors while resolving project's name
-    let name = match name {
-      Some(v) => v,
-      None => {
-        warn!("Failed to resolve project name from XML node: {raw_node:?}");
-        return None;
-      }
-    };
+    // Extract project's IDE code
+    let ide_code = ensure!(
+      raw_node
+        .get_first_node(IDE_CODE_PATH)
+        .and_then(|node| node.attribute_value("value")),
+      "Failed to extract IDE code from XML node: {raw_node:?}"
+    );
 
-    // Extract project's IDE from the XML node and handle errors
-    let ide_code = match raw_node
-      .get_first_node(IDE_CODE_PATH)
-      .and_then(|node| node.attribute_value("value"))
-    {
-      Some(v) => v,
-      None => {
-        warn!("Failed to extract IDE code from XML node: {raw_node:?}");
-        return None;
-      }
-    };
+    // Resolve IDE information from project's IDE code
+    let ide = ensure!(
+      IDE::from_code(&ide_code),
+      "Ignoring entry {raw_node:?}, unknown IDE code: {ide_code}"
+    );
 
-    // Resolve IDE info from project's IDE code
-    let ide = match IDE::from_code(&ide_code) {
-      Some(v) => v,
-      None => {
-        warn!("Ignoring entry {raw_node:?}, unknown IDE code: {ide_code}");
-        return None;
-      }
-    };
-
-    let last_opened = raw_node
-      .get_first_node(LAST_OPENED_TIMESTAMP_PATH)
-      .and_then(|node| node.attribute_value("value"))
-      .map(|raw| raw.parse::<i64>().ok())
-      .and_then(|timestamp| {
-        timestamp.map(|timestamp| {
-          NaiveDateTime::from_timestamp_millis(timestamp)
-            .as_ref()
-            .map(NaiveDateTime::and_utc)
-            .map(|utc| utc.with_timezone(&Local))
+    // Extract project's last opened timestamp
+    let last_opened = ensure!(
+      raw_node
+        .get_first_node(LAST_OPENED_TIMESTAMP_PATH)
+        .and_then(|node| node.attribute_value("value"))
+        .map(|raw| raw.parse::<i64>().ok())
+        .and_then(|timestamp| {
+          timestamp.map(|timestamp| {
+            NaiveDateTime::from_timestamp_millis(timestamp)
+              .as_ref()
+              .map(NaiveDateTime::and_utc)
+              .map(|utc| utc.with_timezone(&Local))
+          })
         })
-      })
-      .flatten();
+        .flatten(),
+      "Failed to extract last opened time from XML node: {raw_node:?}"
+    );
 
-    let last_opened = match last_opened {
-      Some(v) => v,
-      None => {
-        warn!("Failed to extract last opened time from XML node: {raw_node:?}");
-        return None;
-      }
-    };
+    // Resolve project's custom icon from project's path
+    let icon = ensure!(
+      globmatch::Builder::new(".idea/icon.*")
+        .build(&path)
+        .ok()
+        .map(|matcher| matcher.into_iter().flatten().next()),
+      "Failed to build glob matcher for XML node: {raw_node:?}"
+    );
 
-    // Search for project's icon in project path and handle errors while building a matcher
-    let icon = match globmatch::Builder::new(".idea/icon.*").build(&path) {
-      Ok(matcher) => matcher.into_iter().flatten().next(),
-      Err(_) => {
-        warn!("Failed to build glob matcher for XML node: {raw_node:?}");
-        None
-      }
-    };
-
-    Some(RecentProject {
+    Some(Ok(RecentProject {
       name,
       path,
       icon,
       ide,
       last_opened,
-    })
+    }))
   }
 }

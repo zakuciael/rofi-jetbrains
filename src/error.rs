@@ -2,12 +2,12 @@ use glib::error;
 
 use crate::G_LOG_DOMAIN;
 
-pub trait UnwrapOrError<T> {
-  fn unwrap_or_error<R: AsRef<str>>(self, msg: R) -> Result<T, ()>;
+pub trait MapToErrorLog<T> {
+  fn map_to_error_log<M: AsRef<str>>(self, msg: M) -> Result<T, ()>;
 }
 
-impl<T> UnwrapOrError<T> for Option<T> {
-  fn unwrap_or_error<R: AsRef<str>>(self, msg: R) -> Result<T, ()> {
+impl<T> MapToErrorLog<T> for Option<T> {
+  fn map_to_error_log<M: AsRef<str>>(self, msg: M) -> Result<T, ()> {
     match self {
       Some(v) => Ok(v),
       None => {
@@ -18,8 +18,8 @@ impl<T> UnwrapOrError<T> for Option<T> {
   }
 }
 
-impl<T, E> UnwrapOrError<T> for Result<T, E> {
-  fn unwrap_or_error<R: AsRef<str>>(self, msg: R) -> Result<T, ()> {
+impl<T, E> MapToErrorLog<T> for Result<T, E> {
+  fn map_to_error_log<M: AsRef<str>>(self, msg: M) -> Result<T, ()> {
     match self {
       Ok(v) => Ok(v),
       Err(_) => {

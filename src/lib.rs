@@ -1,16 +1,17 @@
-use glib::{debug, GlibLogger, GlibLoggerDomain, GlibLoggerFormat};
+use glib::{debug, warn, GlibLogger, GlibLoggerDomain, GlibLoggerFormat};
 use itertools::Itertools;
 use log::LevelFilter;
 use rofi_mode::cairo::Surface;
 use rofi_mode::{export_mode, Action, Api, Event, Matcher};
 
 use crate::config::Config;
-use crate::error::UnwrapOrError;
+use crate::error::MapToErrorLog;
 use crate::recent_project::{RecentProject, RecentProjectsParser};
 
 mod config;
 mod error;
 mod ide;
+mod macros;
 mod recent_project;
 mod rofi;
 mod traits;
@@ -42,26 +43,33 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
     debug!("Parsing config options...");
     let config = Config::from_rofi();
 
-    // TODO: Sort by last opened time
     debug!("Searching for recent project..");
-    let entries = vec![&config.configs_path, &config.android_studio_config_path]
+    let matchers = vec![&config.configs_path, &config.android_studio_config_path]
       .iter()
-      .flat_map(|path| {
+      .map(|config_path| {
         globmatch::Builder::new(RECENT_PROJECTS_GLOB_PATTERN)
-          .build(path)
-          .unwrap_or_error(format!(
-            "Unable to find recent projects, {path:?} is invalid"
+          .build(config_path)
+          .map_to_error_log(format!(
+            "Failed to setup glob matcher for recent projects, {config_path:?} is an invalid path"
           ))
       })
-      .flat_map(|matcher| {
-        matcher
-          .into_iter()
-          .flatten()
-          .flat_map(|entry| {
-            debug!("Reading recent projects XML file {entry:?}..");
-            RecentProjectsParser::from_file(entry)
-          })
-          .flatten()
+      .collect::<Result<Vec<_>, _>>()?;
+
+    let entries = matchers
+      .into_iter()
+      .flat_map(|matcher| matcher.into_iter().flatten())
+      .flat_map(|entry| {
+        debug!("Reading recent projects XML file {entry:?}..");
+        RecentProjectsParser::from_file(entry)
+      })
+      .flatten()
+      .filter_map(|result| match result {
+        // Log errors returned by the RecentProjectsParser's iterator and skip those entries
+        Ok(v) => Some(v),
+        Err(err) => {
+          warn!("{}", err);
+          None
+        }
       })
       .dedup()
       .sorted_by(|a, b| Ord::cmp(&b.last_opened, &a.last_opened))
