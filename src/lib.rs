@@ -94,7 +94,15 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
   fn entry_icon(&mut self, line: usize, size: u32) -> Option<Surface> {
     // TODO: Resolve IDE icon from bin folder
     let project = &self.projects[line];
+    let project_icon = &project
+      .icon
+      .as_ref()
+      .map(|path| path.to_string_lossy().to_string());
     let data = project.ide.get_data();
+
+    if let Some(icon) = project_icon {
+      return self.api.query_icon(icon, size).wait(&mut self.api);
+    }
 
     self
       .api
