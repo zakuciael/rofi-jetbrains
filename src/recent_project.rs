@@ -34,7 +34,6 @@ pub struct RecentProject {
   pub icon: Option<PathBuf>,
   pub ide: IDE,
   pub last_opened: DateTime<Local>,
-  ide_code: String,
 }
 
 #[derive(Debug)]
@@ -47,7 +46,7 @@ impl PartialEq for RecentProject {
     // We can ignore "name", "icon" as it should be always evaluated to the same value given the same project path
     // Also don't compare the "last_opened" prop as it might vary between entries for the same project
     // Instead let's update the value to the most recent timestamp
-    self.path == other.path && self.ide_code == other.ide_code
+    self.path == other.path && self.ide == other.ide
   }
 }
 
@@ -57,7 +56,7 @@ impl Hash for RecentProject {
   fn hash<H: Hasher>(&self, state: &mut H) {
     // See notes for the "PartialEq" implementation to read why only these props are hashed
     Hash::hash(&self.path, state);
-    Hash::hash(&self.ide_code, state);
+    Hash::hash(&self.ide, state);
   }
 }
 
@@ -185,7 +184,6 @@ impl Iterator for RecentProjectsParser {
       path,
       icon,
       ide,
-      ide_code,
       last_opened,
     }))
   }
