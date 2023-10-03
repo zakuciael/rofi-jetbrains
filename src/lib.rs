@@ -28,7 +28,7 @@ export_mode!(Mode<'_>);
 struct Mode<'rofi> {
   api: Api<'rofi>,
   config: Config,
-  entries: Vec<RecentProject>,
+  projects: Vec<RecentProject>,
 }
 
 impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
@@ -55,7 +55,7 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
       })
       .collect::<Result<Vec<_>, _>>()?;
 
-    let entries = matchers
+    let projects = matchers
       .into_iter()
       .flat_map(|matcher| matcher.into_iter().flatten())
       .flat_map(|entry| {
@@ -71,29 +71,29 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
           None
         }
       })
-      .dedup()
       .sorted_by(|a, b| Ord::cmp(&b.last_opened, &a.last_opened))
+      .unique()
       .collect::<Vec<_>>();
 
     Ok(Self {
       api,
       config,
-      entries,
+      projects,
     })
   }
 
   fn entries(&mut self) -> usize {
-    self.entries.len()
+    self.projects.len()
   }
 
   fn entry_content(&self, line: usize) -> rofi_mode::String {
-    let project = &self.entries[line];
+    let project = &self.projects[line];
     project.name.clone().into()
   }
 
   fn entry_icon(&mut self, line: usize, size: u32) -> Option<Surface> {
     // TODO: Resolve IDE icon from bin folder
-    let project = &self.entries[line];
+    let project = &self.projects[line];
     let data = project.ide.get_data();
 
     self
@@ -109,7 +109,7 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
 
   fn matches(&self, line: usize, matcher: Matcher<'_>) -> bool {
     // TODO: Better matching for user input
-    matcher.matches(self.entries[line].name.as_str())
+    matcher.matches(self.projects[line].name.as_str())
   }
 
   fn preprocess_input(&mut self, input: &str) -> rofi_mode::String {

@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 use std::fs::read_to_string;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
 use amxml::dom::{new_document, NodePtr};
@@ -26,18 +27,38 @@ static LAST_OPENED_TIMESTAMP_PATH: &str =
   "value/RecentProjectMetaInfo/option[@name=\"projectOpenTimestamp\"]";
 static IDE_CODE_PATH: &str = "value/RecentProjectMetaInfo/option[@name=\"productionCode\"]";
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone)]
 pub struct RecentProject {
   pub name: String,
   pub path: PathBuf,
   pub icon: Option<PathBuf>,
   pub ide: IDE,
   pub last_opened: DateTime<Local>,
+  ide_code: String,
 }
 
 #[derive(Debug)]
 pub struct RecentProjectsParser {
   nodes: VecDeque<NodePtr>,
+}
+
+impl PartialEq for RecentProject {
+  fn eq(&self, other: &Self) -> bool {
+    // We can ignore "name", "icon" as it should be always evaluated to the same value given the same project path
+    // Also don't compare the "last_opened" prop as it might vary between entries for the same project
+    // Instead let's update the value to the most recent timestamp
+    self.path == other.path && self.ide_code == other.ide_code
+  }
+}
+
+impl Eq for RecentProject {}
+
+impl Hash for RecentProject {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    // See notes for the "PartialEq" implementation to read why only these props are hashed
+    Hash::hash(&self.path, state);
+    Hash::hash(&self.ide_code, state);
+  }
 }
 
 impl RecentProjectsParser {
@@ -164,6 +185,7 @@ impl Iterator for RecentProjectsParser {
       path,
       icon,
       ide,
+      ide_code,
       last_opened,
     }))
   }

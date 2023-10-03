@@ -1,5 +1,5 @@
 #[allow(clippy::upper_case_acronyms)]
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub enum IDE {
   Aqua(IDEData),
   CLion(IDEData),
@@ -20,7 +20,7 @@ pub enum IDE {
 }
 
 // TODO: Add an option to specify installation path prefix
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub struct IDEData {
   pub shell_script_names: Vec<String>,
   pub icon_name: String,
