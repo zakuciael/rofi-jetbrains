@@ -1,16 +1,19 @@
 [package]
 name = "rofi-jetbrains"
-version = "0.1.0"
+version = "1.0.0"
 description = "A rofi plugin that adds the ability to launch recent projects in JetBrains IDEs"
 authors = ["Krzysztof Saczuk <me@krzysztofsaczuk.pl>"]
 edition = "2021"
 repository = "https://github.com/zakuciael/rofi-jetbrains"
 readme = "README.md"
-license = "MIT"
+license-file = "LICENSE"
 keywords = ["rofi", "plugin", "rofi-plugin", "jetbrains"]
 
 [lib]
 crate-type = ["cdylib"]
+
+[profile.release]
+strip = true
 
 [dependencies]
 amxml = "0.5.3"
