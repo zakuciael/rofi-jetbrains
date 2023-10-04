@@ -1,3 +1,7 @@
+use std::os::unix::process::CommandExt;
+use std::process;
+use std::process::Command;
+
 use glib::{debug, warn, GlibLogger, GlibLoggerDomain, GlibLoggerFormat};
 use itertools::Itertools;
 use log::LevelFilter;
@@ -71,6 +75,18 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
           None
         }
       })
+      .filter(|project| {
+        if project
+          .ide
+          .get_shell_script(&config.shell_scripts_path)
+          .is_none()
+        {
+          warn!("Ignoring project {:?}, IDE is not installed", project.path);
+          return false;
+        }
+
+        true
+      })
       .sorted_by(|a, b| Ord::cmp(&b.last_opened, &a.last_opened))
       .unique()
       .collect::<Vec<_>>();
@@ -110,9 +126,40 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
       .wait(&mut self.api)
   }
 
-  fn react(&mut self, _event: Event, _input: &mut rofi_mode::String) -> Action {
+  fn react(&mut self, event: Event, input: &mut rofi_mode::String) -> Action {
+    debug!("{:?} | {:?}", event, input);
     // TODO: Handle user input
-    Action::Exit
+    // TODO: Handle IDE queries and aliases
+    // CustomInput event is triggered by pressing ctrl + enter
+    // We might use CustomInput event to go into the "IDE-query" mode
+    // Where we display search results only for projects opened in that IDE
+
+    match event {
+      Event::Ok { selected, .. } => {
+        let project = &self.projects[selected];
+
+        if let Some(shell_script) = project
+          .ide
+          .get_shell_script(&self.config.shell_scripts_path)
+        {
+          Command::new(shell_script)
+            .arg(&project.path)
+            .stdout(process::Stdio::null())
+            .stderr(process::Stdio::null())
+            .process_group(0)
+            .spawn()
+            .map_to_error_log(format!(
+              "Failed to spawn IDE with the project: {:?}",
+              &project.path
+            ))
+            .unwrap();
+        }
+
+        Action::Exit
+      }
+      Event::Cancel { .. } => Action::Exit,
+      _ => Action::Reload,
+    }
   }
 
   fn matches(&self, line: usize, matcher: Matcher<'_>) -> bool {

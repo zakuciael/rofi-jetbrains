@@ -1,5 +1,7 @@
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
+use crate::error::MapToErrorLog;
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -82,6 +84,22 @@ impl IDEData {
 impl IDE {
   pub fn get_data(&self) -> &IDEData {
     &(*IDE_DATA)[self]
+  }
+
+  pub fn get_shell_script<P: AsRef<Path>>(&self, shell_scripts_path: P) -> Option<PathBuf> {
+    let data = self.get_data();
+    let shell_scripts_path = shell_scripts_path.as_ref();
+    let shell_script_pattern = format!("{{{}}}", data.shell_script_names.join(","));
+
+    let matcher = globmatch::Builder::new(&shell_script_pattern)
+      .build(shell_scripts_path)
+      .map_to_error_log(format!(
+        "Failed to create glob matcher for shell scripts, {:?} is an invalid path",
+        shell_scripts_path
+      ))
+      .unwrap();
+
+    matcher.into_iter().flatten().next()
   }
 
   pub fn from_code<T: AsRef<str>>(code: T) -> Option<Self> {
