@@ -1,6 +1,7 @@
 use std::os::unix::process::CommandExt;
 use std::process;
 use std::process::Command;
+use std::sync::Arc;
 
 use glib::{debug, warn, GlibLogger, GlibLoggerDomain, GlibLoggerFormat};
 use itertools::Itertools;
@@ -10,6 +11,7 @@ use rofi_mode::{export_mode, Action, Api, Event, Matcher};
 
 use crate::config::Config;
 use crate::error::MapToErrorLog;
+use crate::ide::IDE;
 use crate::recent_project::{RecentProject, RecentProjectsParser};
 
 mod config;
@@ -32,7 +34,9 @@ export_mode!(Mode<'_>);
 struct Mode<'rofi> {
   api: Api<'rofi>,
   config: Config,
-  projects: Vec<RecentProject>,
+  found_projects: Vec<Arc<RecentProject>>,
+  query: Option<IDE>,
+  entries: Vec<Arc<RecentProject>>,
 }
 
 impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
@@ -59,7 +63,7 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
       })
       .collect::<Result<Vec<_>, _>>()?;
 
-    let projects = matchers
+    let found_projects = matchers
       .into_iter()
       .flat_map(|matcher| matcher.into_iter().flatten())
       .flat_map(|entry| {
@@ -89,54 +93,53 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
       })
       .sorted_by(|a, b| Ord::cmp(&b.last_opened, &a.last_opened))
       .unique()
+      .map(Arc::new)
       .collect::<Vec<_>>();
+
+    let entries = found_projects.iter().map(Arc::clone).collect::<Vec<_>>();
 
     Ok(Self {
       api,
       config,
-      projects,
+      found_projects,
+      entries,
+      query: None,
     })
   }
 
   fn entries(&mut self) -> usize {
-    self.projects.len()
+    self.entries.len()
   }
 
   fn entry_content(&self, line: usize) -> rofi_mode::String {
-    let project = &self.projects[line];
-    project.name.clone().into()
+    self.entries[line].name.clone().into()
   }
 
   fn entry_icon(&mut self, line: usize, size: u32) -> Option<Surface> {
     // TODO: Resolve IDE icon from bin folder
-    let project = &self.projects[line];
-    let project_icon = &project
+    let project = &self.entries[line];
+
+    if let Some(icon) = project
       .icon
       .as_ref()
-      .map(|path| path.to_string_lossy().to_string());
-    let data = project.ide.get_data();
-
-    if let Some(icon) = project_icon {
-      return self.api.query_icon(icon, size).wait(&mut self.api);
+      .map(|path| path.to_string_lossy().to_string())
+    {
+      return self.api.query_icon(&icon, size).wait(&mut self.api);
     }
 
     self
       .api
-      .query_icon(&data.icon_name, size)
+      .query_icon(&project.ide.get_data().icon_name, size)
       .wait(&mut self.api)
   }
 
   fn react(&mut self, event: Event, input: &mut rofi_mode::String) -> Action {
-    debug!("{:?} | {:?}", event, input);
-    // TODO: Handle user input
-    // TODO: Handle IDE queries and aliases
-    // CustomInput event is triggered by pressing ctrl + enter
-    // We might use CustomInput event to go into the "IDE-query" mode
-    // Where we display search results only for projects opened in that IDE
+    debug!("Received event {:?} with input {:?}", event, input);
+    // TODO: Handle IDE aliases
 
     match event {
       Event::Ok { selected, .. } => {
-        let project = &self.projects[selected];
+        let project = &self.entries[selected];
 
         if let Some(shell_script) = project
           .ide
@@ -157,6 +160,35 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
 
         Action::Exit
       }
+      Event::CustomInput { alt, .. } => {
+        if self.query.is_none() || alt {
+          debug!("Attempting to set results into query-mode..");
+          if let Some(Some(ide)) = input.split(' ').next().map(IDE::from_code) {
+            self.query = Some(ide);
+            self.entries = self
+              .found_projects
+              .iter()
+              .filter(|project| &project.ide == self.query.as_ref().unwrap())
+              .map(Arc::clone)
+              .collect();
+
+            debug!(
+              "Results set to query-mode, displaying results for IDE: {:?}",
+              self.query.as_ref().unwrap()
+            );
+            Action::Reset
+          } else {
+            debug!("Aborting change, no valid IDE found in the input");
+            Action::Reload
+          }
+        } else {
+          self.query = None;
+          self.entries = self.found_projects.iter().map(Arc::clone).collect();
+
+          debug!("Results set into normal mode, requested by user");
+          Action::Reload
+        }
+      }
       Event::Cancel { .. } => Action::Exit,
       _ => Action::Reload,
     }
@@ -164,11 +196,6 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
 
   fn matches(&self, line: usize, matcher: Matcher<'_>) -> bool {
     // TODO: Better matching for user input
-    matcher.matches(self.projects[line].name.as_str())
-  }
-
-  fn preprocess_input(&mut self, input: &str) -> rofi_mode::String {
-    // TODO: Handle IDE queries and aliases
-    input.into()
+    matcher.matches(&self.entries[line].name)
   }
 }
