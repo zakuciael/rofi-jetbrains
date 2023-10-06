@@ -98,16 +98,15 @@ impl Iterator for RecentProjectsParser {
       raw_node
         .attribute_value("value")
         .or(raw_node.attribute_value("key"))
-        .map(|raw_path| raw_path.replace("$USER_HOME$", "~").resolve().to_path_buf())
-        .and_then(|path| {
+        .map(|raw_path| {
+          let path = raw_path.replace("$USER_HOME$", "~").resolve().to_path_buf();
           if path.is_file() {
             name = path
               .file_stem()
               .map(|name| name.to_string_lossy().to_string());
-            path.parent().map(Path::to_path_buf)
-          } else {
-            Some(path)
           }
+
+          path
         }),
       "Failed to resolve project path from XML node: {raw_node:?}"
     );
