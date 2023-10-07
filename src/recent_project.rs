@@ -2,14 +2,15 @@ use std::collections::VecDeque;
 use std::fs::read_to_string;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use amxml::dom::{new_document, NodePtr};
 use chrono::{DateTime, Local, NaiveDateTime};
 use resolve_path::PathResolveExt;
 
-use crate::error::MapToErrorLog;
-use crate::ide::IDE;
+use crate::ide::data::IDEData;
 use crate::macros::ensure;
+use crate::traits::MapToErrorLog;
 
 static BASE_PATHS: [&str; 4] = [
   ".//component[@name=\"RecentProjectsManager\"][1]",
@@ -25,19 +26,19 @@ static ENTRY_PATHS: [&str; 3] = [
 
 static LAST_OPENED_TIMESTAMP_PATH: &str =
   "value/RecentProjectMetaInfo/option[@name=\"projectOpenTimestamp\"]";
-static IDE_CODE_PATH: &str = "value/RecentProjectMetaInfo/option[@name=\"productionCode\"]";
 
 #[derive(Debug, Clone)]
 pub struct RecentProject {
   pub name: String,
   pub path: PathBuf,
   pub icon: Option<PathBuf>,
-  pub ide: IDE,
+  pub ide: Arc<IDEData>,
   pub last_opened: DateTime<Local>,
 }
 
 #[derive(Debug)]
 pub struct RecentProjectsParser {
+  ide: Arc<IDEData>,
   nodes: VecDeque<NodePtr>,
 }
 
@@ -46,7 +47,7 @@ impl PartialEq for RecentProject {
     // We can ignore "name", "icon" as it should be always evaluated to the same value given the same project path
     // Also don't compare the "last_opened" prop as it might vary between entries for the same project
     // Instead let's update the value to the most recent timestamp
-    self.path == other.path && self.ide == other.ide
+    self.path == other.path && self.ide.ide_type == other.ide.ide_type
   }
 }
 
@@ -56,12 +57,12 @@ impl Hash for RecentProject {
   fn hash<H: Hasher>(&self, state: &mut H) {
     // See notes for the "PartialEq" implementation to read why only these props are hashed
     Hash::hash(&self.path, state);
-    Hash::hash(&self.ide, state);
+    Hash::hash(&self.ide.ide_type, state);
   }
 }
 
 impl RecentProjectsParser {
-  pub fn from_file<T: AsRef<Path>>(path: T) -> Result<RecentProjectsParser, ()> {
+  pub fn from_file<T: AsRef<Path>>(path: T, ide: Arc<IDEData>) -> Result<RecentProjectsParser, ()> {
     let xml = read_to_string(path).map_to_error_log("Failed to read recent projects XML file")?;
     let document =
       new_document(&xml).map_to_error_log("Failed to parse recent projects XML file")?;
@@ -78,7 +79,7 @@ impl RecentProjectsParser {
       .flatten()
       .collect::<VecDeque<_>>();
 
-    Ok(RecentProjectsParser { nodes })
+    Ok(RecentProjectsParser { ide, nodes })
   }
 }
 
@@ -137,20 +138,6 @@ impl Iterator for RecentProjectsParser {
       "Failed to resolve project name from XML node: {raw_node:?}"
     );
 
-    // Extract project's IDE code
-    let ide_code = ensure!(
-      raw_node
-        .get_first_node(IDE_CODE_PATH)
-        .and_then(|node| node.attribute_value("value")),
-      "Failed to extract IDE code from XML node: {raw_node:?}"
-    );
-
-    // Resolve IDE information from project's IDE code
-    let ide = ensure!(
-      IDE::from_code(&ide_code),
-      "Ignoring entry {raw_node:?}, unknown IDE code: {ide_code}"
-    );
-
     // Extract project's last opened timestamp
     let last_opened = ensure!(
       raw_node
@@ -182,7 +169,7 @@ impl Iterator for RecentProjectsParser {
       name,
       path,
       icon,
-      ide,
+      ide: self.ide.clone(),
       last_opened,
     }))
   }

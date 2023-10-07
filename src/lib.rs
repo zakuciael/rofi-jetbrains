@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::os::unix::process::CommandExt;
 use std::process;
 use std::process::Command;
@@ -6,16 +7,19 @@ use std::sync::Arc;
 use glib::{debug, warn, GlibLogger, GlibLoggerDomain, GlibLoggerFormat};
 use itertools::Itertools;
 use log::LevelFilter;
+use resolve_path::PathResolveExt;
 use rofi_mode::cairo::Surface;
 use rofi_mode::{export_mode, Action, Api, Event, Matcher};
 
 use crate::config::Config;
-use crate::error::MapToErrorLog;
-use crate::ide::IDE;
+use crate::ide::data::IDEData;
+use crate::ide::product_info::IDEProductInfo;
+use crate::ide::properties::IDEProperties;
+use crate::ide::IDEType;
 use crate::recent_project::{RecentProject, RecentProjectsParser};
+use crate::traits::MapToErrorLog;
 
 mod config;
-mod error;
 mod ide;
 mod macros;
 mod recent_project;
@@ -27,16 +31,19 @@ pub static G_LOG_DOMAIN: &str = "Modes.JetBrains";
 static GLIB_LOGGER: GlibLogger =
   GlibLogger::new(GlibLoggerFormat::Plain, GlibLoggerDomain::CrateTarget);
 
-static RECENT_PROJECTS_GLOB_PATTERN: &str = "./**/options/{recentProjects,recentSolutions}.xml";
+static RECENT_PROJECTS_GLOB_PATTERN: &str = "options/{recentProjects,recentSolutions}.xml";
+static PRODUCT_INFO_GLOB_PATTERN: &str = "./**/product-info.json";
 
 export_mode!(Mode<'_>);
 
 struct Mode<'rofi> {
   api: Api<'rofi>,
   config: Config,
-  found_projects: Vec<Arc<RecentProject>>,
-  query: Option<IDE>,
+  ides: Vec<Arc<IDEData>>,
+  projects: Vec<Arc<RecentProject>>,
+  query: Option<IDEType>,
   entries: Vec<Arc<RecentProject>>,
+  icon_cache: HashMap<IDEType, String>,
 }
 
 impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
@@ -51,59 +58,102 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
     debug!("Parsing config options...");
     let config = Config::from_rofi();
 
-    debug!("Searching for recent project..");
-    let matchers = vec![&config.configs_path, &config.android_studio_config_path]
-      .iter()
-      .map(|config_path| {
-        globmatch::Builder::new(RECENT_PROJECTS_GLOB_PATTERN)
-          .build(config_path)
-          .map_to_error_log(format!(
-            "Failed to setup glob matcher for recent projects, {config_path:?} is an invalid path"
-          ))
-      })
-      .collect::<Result<Vec<_>, _>>()?;
+    debug!("Searching for installed IDEs..");
+    let matcher = globmatch::Builder::new(PRODUCT_INFO_GLOB_PATTERN)
+      .build(&config.install_dir)
+      .map_to_error_log("Failed to setup glob matcher for IDE product info")?;
 
-    let found_projects = matchers
+    debug!("Looking for \"idea.properties\" under the user's home directory..");
+    let home_properties = IDEProperties::from_file("~/idea.properties".resolve());
+
+    if home_properties.is_none() {
+      debug!("File was not found, skipping..");
+    }
+
+    let ides = matcher
       .into_iter()
-      .flat_map(|matcher| matcher.into_iter().flatten())
-      .flat_map(|entry| {
-        debug!("Reading recent projects XML file {entry:?}..");
-        RecentProjectsParser::from_file(entry)
-      })
       .flatten()
-      .filter_map(|result| match result {
-        // Log errors returned by the RecentProjectsParser's iterator and skip those entries
-        Ok(v) => Some(v),
-        Err(err) => {
-          warn!("{}", err);
-          None
-        }
-      })
-      .filter(|project| {
-        if project
-          .ide
-          .get_shell_script(&config.shell_scripts_path)
-          .is_none()
-        {
-          warn!("Ignoring project {:?}, IDE is not installed", project.path);
-          return false;
-        }
+      .flat_map(|entry| -> Result<_, ()> {
+        debug!("Parsing IDE data from {:?} file", &entry);
+        let install_dir = entry.parent().map_to_error_log(format!(
+          "Failed to resolve the parent directory for {:?} file ",
+          &entry
+        ))?;
+        let product_info = IDEProductInfo::from_file(&entry)?;
+        let config_path = home_properties
+          .as_ref()
+          .and_then(|props| props.config_path.clone())
+          .or_else(|| {
+            IDEProperties::from_file(install_dir.join("bin/idea.properties"))
+              .and_then(|props| props.config_path)
+          })
+          .unwrap_or_else(|| {
+            (if product_info.ide_type == IDEType::AndroidStudio {
+              "~/.config/Google"
+            } else {
+              "~/.config/JetBrains"
+            })
+            .resolve()
+            .to_path_buf()
+          });
 
-        true
+        Ok(IDEData::from_product_info(
+          &product_info,
+          install_dir,
+          config_path,
+        ))
       })
+      .map(Arc::new)
+      .collect::<Vec<_>>();
+
+    debug!("Searching for recent project..");
+    let mut projects = vec![];
+
+    for ide in ides.iter() {
+      let matcher = globmatch::Builder::new(RECENT_PROJECTS_GLOB_PATTERN)
+        .build(&ide.config_path)
+        .map_to_error_log(format!(
+          "Failed to setup glob matcher for recent projects, {:?} is an invalid path",
+          &ide.config_path
+        ))?;
+
+      projects.extend(
+        matcher
+          .into_iter()
+          .flatten()
+          .flat_map(|entry| {
+            debug!("Reading recent projects XML file {entry:?}..");
+            RecentProjectsParser::from_file(entry, ide.clone())
+          })
+          .flatten()
+          .filter_map(|result| match result {
+            // Log errors returned by the RecentProjectsParser's iterator and skip those entries
+            Ok(v) => Some(v),
+            Err(err) => {
+              warn!("{}", err);
+              None
+            }
+          }),
+      );
+    }
+
+    let projects = projects
+      .into_iter()
       .sorted_by(|a, b| Ord::cmp(&b.last_opened, &a.last_opened))
       .unique()
       .map(Arc::new)
       .collect::<Vec<_>>();
 
-    let entries = found_projects.iter().map(Arc::clone).collect::<Vec<_>>();
+    let entries = projects.iter().map(Arc::clone).collect::<Vec<_>>();
 
     Ok(Self {
       api,
       config,
-      found_projects,
+      ides,
+      projects,
       entries,
       query: None,
+      icon_cache: HashMap::new(),
     })
   }
 
@@ -116,7 +166,6 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
   }
 
   fn entry_icon(&mut self, line: usize, size: u32) -> Option<Surface> {
-    // TODO: Resolve IDE icon from bin folder
     let project = &self.entries[line];
 
     if let Some(icon) = project
@@ -127,10 +176,41 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
       return self.api.query_icon(&icon, size).wait(&mut self.api);
     }
 
-    self
-      .api
-      .query_icon(&project.ide.get_data().icon_name, size)
-      .wait(&mut self.api)
+    let ide = project.ide.clone();
+    if let Some(icon_name) = self.icon_cache.get(&ide.ide_type) {
+      self.api.query_icon(icon_name, size).wait(&mut self.api)
+    } else {
+      self
+        .api
+        .query_icon(&ide.icon_name, size)
+        .wait(&mut self.api)
+        .map(|icon| (icon, ide.icon_name.to_owned()))
+        .or_else(|| {
+          let icon_name = project.ide.icon_name.replace("jetbrains-", "");
+          self
+            .api
+            .query_icon(&icon_name, size)
+            .wait(&mut self.api)
+            .map(|icon| (icon, icon_name))
+        })
+        .or_else(|| {
+          let icon_name = project.ide.fallback_icon_path.to_string_lossy().to_string();
+          self
+            .api
+            .query_icon(&icon_name, size)
+            .wait(&mut self.api)
+            .map(|icon| (icon, icon_name))
+        })
+        .map(|(icon, icon_name)| {
+          debug!(
+            "Caching icon name for {:?} to {:?}",
+            &ide.ide_type, &icon_name
+          );
+          self.icon_cache.insert(ide.ide_type.clone(), icon_name);
+
+          icon
+        })
+    }
   }
 
   fn react(&mut self, event: Event, input: &mut rofi_mode::String) -> Action {
@@ -141,34 +221,29 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
       Event::Ok { selected, .. } => {
         let project = &self.entries[selected];
 
-        if let Some(shell_script) = project
-          .ide
-          .get_shell_script(&self.config.shell_scripts_path)
-        {
-          Command::new(shell_script)
-            .arg(&project.path)
-            .stdout(process::Stdio::null())
-            .stderr(process::Stdio::null())
-            .process_group(0)
-            .spawn()
-            .map_to_error_log(format!(
-              "Failed to spawn IDE with the project: {:?}",
-              &project.path
-            ))
-            .unwrap();
-        }
+        Command::new(&project.ide.launcher_path)
+          .arg(&project.path)
+          .stdout(process::Stdio::null())
+          .stderr(process::Stdio::null())
+          .process_group(0)
+          .spawn()
+          .map_to_error_log(format!(
+            "Failed to spawn IDE with the project: {:?}",
+            &project.path
+          ))
+          .unwrap();
 
         Action::Exit
       }
       Event::CustomInput { alt, .. } => {
         if self.query.is_none() || alt {
           debug!("Attempting to set results into query-mode..");
-          if let Some(Some(ide)) = input.split(' ').next().map(IDE::from_code) {
+          if let Some(Some(ide)) = input.split(' ').next().map(IDEType::from_product_code) {
             self.query = Some(ide);
             self.entries = self
-              .found_projects
+              .projects
               .iter()
-              .filter(|project| &project.ide == self.query.as_ref().unwrap())
+              .filter(|project| &project.ide.ide_type == self.query.as_ref().unwrap())
               .map(Arc::clone)
               .collect();
 
@@ -183,7 +258,7 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
           }
         } else {
           self.query = None;
-          self.entries = self.found_projects.iter().map(Arc::clone).collect();
+          self.entries = self.projects.iter().map(Arc::clone).collect();
 
           debug!("Results set into normal mode, requested by user");
           Action::Reload
