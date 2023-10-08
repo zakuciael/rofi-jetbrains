@@ -1,8 +1,8 @@
 use crate::rofi::xrmoptions::XrmOptionType;
 use std::ffi::c_void;
 
-pub trait XrmOption {
+pub trait XrmOptionConverter {
   fn xrm_type() -> XrmOptionType;
 
-  fn convert_ptr(ptr: *mut c_void) -> Self;
+  fn convert(value: *mut c_void) -> Self;
 }

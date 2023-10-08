@@ -4,7 +4,7 @@ use std::ffi::{c_char, c_void};
 #[repr(C)]
 pub enum XrmOptionType {
   String = 0,
-  Integer = 1,
+  UnsignedInteger = 1,
   SignedInteger = 2,
   Boolean = 3,
   Char = 4,
