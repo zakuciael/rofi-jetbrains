@@ -1,4 +1,4 @@
-macro_rules! ensure {
+macro_rules! ensure_option {
   ($code:expr, $($arg:tt)+) => {
     match $code {
       Some(v) => v,
@@ -9,4 +9,16 @@ macro_rules! ensure {
   };
 }
 
-pub(crate) use ensure;
+macro_rules! ensure_result {
+  ($code:expr, $($arg:tt)+) => {
+    match $code {
+      Some(v) => v,
+      None => {
+        return Err(format!($($arg)+))
+      }
+    }
+  };
+}
+
+pub(crate) use ensure_option;
+pub(crate) use ensure_result;

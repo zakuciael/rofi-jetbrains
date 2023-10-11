@@ -9,7 +9,7 @@ use chrono::{DateTime, Local, NaiveDateTime};
 use resolve_path::PathResolveExt;
 
 use crate::ide::data::IDEData;
-use crate::macros::ensure;
+use crate::macros::ensure_option;
 use crate::traits::MapToErrorLog;
 
 static BASE_PATHS: [&str; 4] = [
@@ -95,7 +95,7 @@ impl Iterator for RecentProjectsParser {
     let mut name: Option<String> = None;
 
     // Extract project's path and optionally its name (from the .sln file)
-    let path = ensure!(
+    let path = ensure_option!(
       raw_node
         .attribute_value("value")
         .or(raw_node.attribute_value("key"))
@@ -128,7 +128,7 @@ impl Iterator for RecentProjectsParser {
     }
 
     // Resolve project's name
-    let name = ensure!(
+    let name = ensure_option!(
       match read_to_string(path.join(".idea/.name")) {
         Ok(raw_name) => Some(raw_name.replace('\n', "")),
         Err(_) => {
@@ -139,7 +139,7 @@ impl Iterator for RecentProjectsParser {
     );
 
     // Extract project's last opened timestamp
-    let last_opened = ensure!(
+    let last_opened = ensure_option!(
       raw_node
         .get_first_node(LAST_OPENED_TIMESTAMP_PATH)
         .and_then(|node| node.attribute_value("value"))
@@ -157,7 +157,7 @@ impl Iterator for RecentProjectsParser {
     );
 
     // Resolve project's custom icon from project's path
-    let icon = ensure!(
+    let icon = ensure_option!(
       globmatch::Builder::new(".idea/icon.*")
         .build(&path)
         .ok()

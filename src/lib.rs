@@ -10,6 +10,7 @@ use log::LevelFilter;
 use resolve_path::PathResolveExt;
 use rofi_mode::cairo::Surface;
 use rofi_mode::{export_mode, Action, Api, Event, Matcher};
+use strum::IntoEnumIterator;
 
 use crate::config::Config;
 use crate::ide::data::IDEData;
@@ -42,6 +43,7 @@ struct Mode<'rofi> {
   query: Option<IDEType>,
   entries: Vec<Arc<RecentProject>>,
   icon_cache: HashMap<IDEType, String>,
+  aliases: HashMap<String, IDEType>,
 }
 
 impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
@@ -55,6 +57,22 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
 
     debug!("Parsing config options...");
     let config = Config::from_rofi();
+
+    let predefined_custom_aliases = vec![
+      ("php".to_string(), IDEType::PHPStorm),
+      ("py".to_string(), IDEType::PyCharm),
+      ("web".to_string(), IDEType::WebStorm),
+      ("go".to_string(), IDEType::GoLand),
+      ("ruby".to_string(), IDEType::RubyMine),
+      ("studio".to_string(), IDEType::AndroidStudio),
+      ("android".to_string(), IDEType::AndroidStudio),
+      ("rust".to_string(), IDEType::RustRover),
+    ];
+
+    let mut aliases = HashMap::<String, IDEType>::new();
+    aliases.extend(IDEType::iter().map(|v| v.get_default_alias()));
+    aliases.extend(predefined_custom_aliases.into_iter());
+    aliases.extend(config.custom_aliases.iter().cloned());
 
     debug!("Searching for installed IDEs..");
     let matcher = globmatch::Builder::new(PRODUCT_INFO_GLOB_PATTERN)
@@ -148,6 +166,7 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
       api,
       projects,
       entries,
+      aliases,
       query: None,
       icon_cache: HashMap::new(),
     })
@@ -211,7 +230,6 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
 
   fn react(&mut self, event: Event, input: &mut rofi_mode::String) -> Action {
     debug!("Received event {:?} with input {:?}", event, input);
-    // TODO: Handle IDE aliases
 
     match event {
       Event::Ok { selected, .. } => {
@@ -233,8 +251,18 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
       }
       Event::CustomInput { alt, .. } => {
         if self.query.is_none() || alt {
-          debug!("Attempting to set results into query-mode..");
-          if let Some(Some(ide)) = input.split(' ').next().map(IDEType::from_product_code) {
+          let query = input.split(' ').next().unwrap();
+          debug!(
+            "Attempting to set results into query-mode using {:?} as query..",
+            query
+          );
+
+          if let Some(ide) = self
+            .aliases
+            .get(query)
+            .cloned()
+            .or_else(|| IDEType::from_product_code(query))
+          {
             self.query = Some(ide);
             self.entries = self
               .projects
