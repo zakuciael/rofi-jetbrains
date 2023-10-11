@@ -31,8 +31,10 @@ jobs:
         with:
           toolchain: stable
           components: clippy
+      - name: Install required system dependencies
+        run: sudo apt-get install -y libpango1.0-dev
       - name: Run clippy
         uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-features
+          args: -- -W warnings
