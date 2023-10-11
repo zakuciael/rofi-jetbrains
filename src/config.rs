@@ -14,11 +14,10 @@ pub struct Config {
 impl Config {
   pub fn from_rofi() -> Self {
     // TODO: Add configuration option for IDE aliases
-    let install_dir = config_parse_option::<String>(
+    let install_dir: Option<PathBuf> = config_parse_option(
       &(ROFI_CONFIG_PREFIX.to_owned() + "install-dir"),
       "A path to the directory where all IDEs are installed",
-    )
-    .map(|raw| raw.resolve().to_path_buf());
+    );
 
     Self {
       install_dir: install_dir.unwrap_or_else(|| {

@@ -38,8 +38,6 @@ export_mode!(Mode<'_>);
 
 struct Mode<'rofi> {
   api: Api<'rofi>,
-  config: Config,
-  ides: Vec<Arc<IDEData>>,
   projects: Vec<Arc<RecentProject>>,
   query: Option<IDEType>,
   entries: Vec<Arc<RecentProject>>,
@@ -148,8 +146,6 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
 
     Ok(Self {
       api,
-      config,
-      ides,
       projects,
       entries,
       query: None,

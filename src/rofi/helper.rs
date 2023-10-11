@@ -2,8 +2,9 @@ use std::borrow::Cow;
 use std::ffi::{c_char, CStr};
 use std::ptr;
 
+#[allow(dead_code)]
 pub fn find_arg_str(key: &str) -> Option<String> {
-  let key = if key.ends_with("\0") {
+  let key = if key.ends_with('\0') {
     Cow::Borrowed(key)
   } else {
     Cow::Owned(key.to_owned() + "\0")
