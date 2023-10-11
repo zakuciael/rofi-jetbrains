@@ -1,0 +1,22 @@
+{
+  "gitSiteUrl": "https://github.com/zakuciael/rofi-jetbrains/",
+  "pkgManagers": {
+    "rust": {
+      "version": true,
+      "publish": false,
+      "getPublishedVersion": false
+    }
+  },
+  "packages": {
+    "rofi-jetbrains": {
+      "path": ".",
+      "manager": "rust",
+      "assets": [
+        {
+          "path": "./target/release/librofi_jetbrains.so",
+          "name": "jetbrains.so"
+        }
+      ]
+    }
+  }
+}
