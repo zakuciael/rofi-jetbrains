@@ -3,8 +3,8 @@
   "pkgManagers": {
     "rust": {
       "version": true,
-      "publish": false,
-      "getPublishedVersion": false
+      "publish": "echo Publishing version ${ pkgFile.version } to GitHub releases",
+      "getPublishedVersion": "cargo metadata -q --offline --no-deps --format-version 1 | jq -r '.packages[0].version'"
     }
   },
   "packages": {
