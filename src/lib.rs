@@ -11,6 +11,7 @@ use resolve_path::PathResolveExt;
 use rofi_mode::cairo::Surface;
 use rofi_mode::{export_mode, Action, Api, Event, Matcher};
 use strum::IntoEnumIterator;
+use wax::{Glob, LinkBehavior, WalkEntry};
 
 use crate::config::Config;
 use crate::ide::data::IDEData;
@@ -33,7 +34,7 @@ static GLIB_LOGGER: GlibLogger =
   GlibLogger::new(GlibLoggerFormat::Plain, GlibLoggerDomain::CrateTarget);
 
 static RECENT_PROJECTS_GLOB_PATTERN: &str = "options/{recentProjects,recentSolutions}.xml";
-static PRODUCT_INFO_GLOB_PATTERN: &str = "./**/product-info.json";
+static PRODUCT_INFO_GLOB_PATTERN: &str = "**/product-info.json";
 
 export_mode!(Mode<'_>);
 
@@ -71,12 +72,11 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
 
     let mut aliases = HashMap::<String, IDEType>::new();
     aliases.extend(IDEType::iter().map(|v| v.get_default_alias()));
-    aliases.extend(predefined_custom_aliases.into_iter());
+    aliases.extend(predefined_custom_aliases);
     aliases.extend(config.custom_aliases.iter().cloned());
 
     debug!("Searching for installed IDEs..");
-    let matcher = globmatch::Builder::new(PRODUCT_INFO_GLOB_PATTERN)
-      .build(&config.install_dir)
+    let glob = Glob::new(PRODUCT_INFO_GLOB_PATTERN)
       .map_to_error_log("Failed to setup glob matcher for IDE product info")?;
 
     debug!("Looking for \"idea.properties\" under the user's home directory..");
@@ -86,9 +86,10 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
       debug!("File was not found, skipping..");
     }
 
-    let ides = matcher
-      .into_iter()
+    let ides = glob
+      .walk_with_behavior(&config.install_dir, LinkBehavior::ReadTarget)
       .flatten()
+      .map(WalkEntry::into_path)
       .flat_map(|entry| -> Result<_, ()> {
         debug!("Parsing IDE data from {:?} file", &entry);
         let install_dir = entry.parent().map_to_error_log(format!(
@@ -126,17 +127,16 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
     let mut projects = vec![];
 
     for ide in ides.iter() {
-      let matcher = globmatch::Builder::new(RECENT_PROJECTS_GLOB_PATTERN)
-        .build(&ide.config_path)
-        .map_to_error_log(format!(
-          "Failed to setup glob matcher for recent projects, {:?} is an invalid path",
-          &ide.config_path
-        ))?;
+      let glob = Glob::new(RECENT_PROJECTS_GLOB_PATTERN).map_to_error_log(format!(
+        "Failed to setup glob matcher for recent projects, {:?} is an invalid path",
+        &ide.config_path
+      ))?;
 
       projects.extend(
-        matcher
-          .into_iter()
+        glob
+          .walk_with_behavior(&ide.config_path, LinkBehavior::ReadTarget)
           .flatten()
+          .map(WalkEntry::into_path)
           .flat_map(|entry| {
             debug!("Reading recent projects XML file {entry:?}..");
             RecentProjectsParser::from_file(entry, ide.clone())

@@ -20,7 +20,6 @@ amxml = "0.5.3"
 chrono = "0.4.31"
 dirs = "5.0.1"
 glib = { version = "0.18.2", features = [ "log_macros" ] }
-globmatch = "0.2.5"
 itertools = "0.11.0"
 lazy_static = "1.4.0"
 libc = "0.2.148"
@@ -31,3 +30,4 @@ serde = { version = "1.0.188", features = [ "derive" ] }
 serde-java-properties = "0.1.1"
 serde_json = "1.0.107"
 strum = { version = "0.25.0", features = [ "derive" ] }
+wax = "0.6.0"
