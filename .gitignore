@@ -1,5 +1,6 @@
 .idea/*
 .vscode/*
+.direnv/
 !.idea/copyright/
 !.vscode/settings.json
 !.vscode/tasks.json
