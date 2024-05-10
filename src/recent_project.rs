@@ -7,6 +7,7 @@ use std::sync::Arc;
 use amxml::dom::{new_document, NodePtr};
 use chrono::{DateTime, Local, NaiveDateTime};
 use resolve_path::PathResolveExt;
+use wax::{Glob, LinkBehavior, WalkEntry};
 
 use crate::ide::data::IDEData;
 use crate::macros::ensure_option;
@@ -95,8 +96,8 @@ impl Iterator for RecentProjectsParser {
     let mut name: Option<String> = None;
 
     // Extract project's path and optionally its name (from the .sln file)
-    let path = ensure_option!(
-      raw_node
+    let path = {
+      let value = raw_node
         .attribute_value("value")
         .or(raw_node.attribute_value("key"))
         .map(|raw_path| {
@@ -108,9 +109,13 @@ impl Iterator for RecentProjectsParser {
           }
 
           path
-        }),
-      "Failed to resolve project path from XML node: {raw_node:?}"
-    );
+        });
+
+      ensure_option!(
+        value,
+        "Failed to resolve project path from XML node: {raw_node:?}"
+      )
+    };
 
     // Validate if project's path exists
     match path.try_exists() {
@@ -157,13 +162,18 @@ impl Iterator for RecentProjectsParser {
     );
 
     // Resolve project's custom icon from project's path
-    let icon = ensure_option!(
-      globmatch::Builder::new(".idea/icon.*")
-        .build(&path)
-        .ok()
-        .map(|matcher| matcher.into_iter().flatten().next()),
-      "Failed to build glob matcher for XML node: {raw_node:?}"
-    );
+    let icon = {
+      let glob = ensure_option!(
+        Glob::new(".idea/icon.*").ok(),
+        "Failed to build icon glob matcher for XML node: {raw_node:?}"
+      );
+
+      glob
+        .walk_with_behavior(&path, LinkBehavior::ReadTarget)
+        .flatten()
+        .map(WalkEntry::into_path)
+        .next()
+    };
 
     Some(Ok(RecentProject {
       name,
