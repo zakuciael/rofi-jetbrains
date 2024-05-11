@@ -13,6 +13,8 @@
     rustc = toolchain.rustc;
   };
   cargoToml = lib.importTOML ./Cargo.toml;
+  srcFileName = ''lib${builtins.replaceStrings ["-"] ["_"] cargoToml.package.name}.so'';
+  outFileName = "jetbrains.so";
 in
   rustPlatform.buildRustPackage rec {
     inherit (cargoToml.package) name version;
@@ -23,14 +25,13 @@ in
     ];
 
     buildInputs = with pkgs; [
-      stdenv.cc
       glib.dev
       gtk3.dev
     ];
 
     postInstall = ''
       mkdir -p $out/lib/rofi
-      mv $out/lib/*.so $out/lib/rofi
+      mv $out/lib/${srcFileName} $out/lib/rofi/${outFileName}
     '';
 
     doCheck = false;
