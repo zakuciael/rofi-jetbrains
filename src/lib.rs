@@ -18,6 +18,7 @@ use crate::ide::data::IDEData;
 use crate::ide::product_info::IDEProductInfo;
 use crate::ide::properties::IDEProperties;
 use crate::ide::IDEType;
+use crate::macros::wrap_icon_request;
 use crate::recent_project::{RecentProject, RecentProjectsParser};
 use crate::traits::MapToErrorLog;
 
@@ -188,43 +189,36 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
       .as_ref()
       .map(|path| path.to_string_lossy().to_string())
     {
-      return self.api.query_icon(&icon, size).wait(&mut self.api);
+      return wrap_icon_request!(self.api.query_icon(&icon, size).wait(&mut self.api));
     }
 
     let ide = project.ide.clone();
     if let Some(icon_name) = self.icon_cache.get(&ide.ide_type) {
-      self.api.query_icon(icon_name, size).wait(&mut self.api)
+      wrap_icon_request!(self.api.query_icon(icon_name, size).wait(&mut self.api))
     } else {
-      self
-        .api
-        .query_icon(&ide.icon_name, size)
-        .wait(&mut self.api)
-        .map(|icon| (icon, ide.icon_name.to_owned()))
-        .or_else(|| {
-          let icon_name = project.ide.icon_name.replace("jetbrains-", "");
-          self
-            .api
-            .query_icon(&icon_name, size)
-            .wait(&mut self.api)
-            .map(|icon| (icon, icon_name))
-        })
-        .or_else(|| {
-          let icon_name = project.ide.fallback_icon_path.to_string_lossy().to_string();
-          self
-            .api
-            .query_icon(&icon_name, size)
-            .wait(&mut self.api)
-            .map(|icon| (icon, icon_name))
-        })
-        .map(|(icon, icon_name)| {
+      let mut request_icon = |icon_name: &str| {
+        if let Some(icon) =
+          wrap_icon_request!(self.api.query_icon(&icon_name, size).wait(&mut self.api))
+        {
           debug!(
             "Caching icon name for {:?} to {:?}",
             &ide.ide_type, &icon_name
           );
-          self.icon_cache.insert(ide.ide_type.clone(), icon_name);
+          self
+            .icon_cache
+            .insert(ide.ide_type.clone(), icon_name.to_owned());
+          return Some(icon);
+        }
 
-          icon
-        })
+        None
+      };
+
+      // Query by WM class name
+      request_icon(&ide.icon_name)
+        // Query by WM class name converted into icon name
+        .or_else(|| request_icon(&project.ide.icon_name.replace("jetbrains-", "")))
+        // Query by fallback icon path
+        .or_else(|| request_icon(&project.ide.fallback_icon_path.to_string_lossy().to_string()))
     }
   }
 

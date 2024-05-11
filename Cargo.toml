@@ -19,15 +19,15 @@ strip = true
 amxml = "0.5.3"
 chrono = "0.4.31"
 dirs = "5.0.1"
-glib = { version = "0.18.2", features = [ "log_macros" ] }
-itertools = "0.11.0"
+glib = { version = "0.19.6", features = [ "log_macros" ] }
+itertools = "0.12.1"
 lazy_static = "1.4.0"
 libc = "0.2.148"
 log = "0.4.20"
 resolve-path = "0.1.0"
-rofi-mode = "0.3.1"
+rofi-mode = "0.4.0"
 serde = { version = "1.0.188", features = [ "derive" ] }
-serde-java-properties = "0.1.1"
+serde-java-properties = "0.2.0"
 serde_json = "1.0.107"
-strum = { version = "0.25.0", features = [ "derive" ] }
+strum = { version = "0.26.2", features = [ "derive" ] }
 wax = "0.6.0"
