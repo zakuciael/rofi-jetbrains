@@ -20,6 +20,8 @@ in
     inherit (cargoToml.package) name version;
     pname = name;
 
+    RUSTFLAG="--cfg rofi_next";
+
     nativeBuildInputs = with pkgs; [
       pkg-config
     ];
