@@ -44,7 +44,6 @@ struct Mode<'rofi> {
   projects: Vec<Arc<RecentProject>>,
   query: Option<IDEType>,
   entries: Vec<Arc<RecentProject>>,
-  icon_cache: HashMap<IDEType, String>,
   aliases: HashMap<String, IDEType>,
 }
 
@@ -169,7 +168,6 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
       entries,
       aliases,
       query: None,
-      icon_cache: HashMap::new(),
     })
   }
 
@@ -184,42 +182,33 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
   fn entry_icon(&mut self, line: usize, size: u32) -> Option<Surface> {
     let project = &self.entries[line];
 
-    if let Some(icon) = project
+    if let Some(icon_path) = project
       .icon
       .as_ref()
       .map(|path| path.to_string_lossy().to_string())
     {
-      return wrap_icon_request!(self.api.query_icon(&icon, size).wait(&mut self.api));
+      return wrap_icon_request!(self.api.query_icon(&icon_path, size).wait(&mut self.api));
     }
 
     let ide = project.ide.clone();
-    if let Some(icon_name) = self.icon_cache.get(&ide.ide_type) {
-      wrap_icon_request!(self.api.query_icon(icon_name, size).wait(&mut self.api))
-    } else {
-      let mut request_icon = |icon_name: &str| {
-        if let Some(icon) =
-          wrap_icon_request!(self.api.query_icon(&icon_name, size).wait(&mut self.api))
-        {
-          debug!(
-            "Caching icon name for {:?} to {:?}",
-            &ide.ide_type, &icon_name
-          );
-          self
-            .icon_cache
-            .insert(ide.ide_type.clone(), icon_name.to_owned());
-          return Some(icon);
-        }
+    let icon_name = ide.icon_name.replace("jetbrains-", "");
+    let mut request_icon = |query: &str| -> Option<Surface> {
+      wrap_icon_request!(self.api.query_icon(query, size).wait(&mut self.api))
+    };
 
-        None
-      };
+    debug!(
+      "Requesting icon for {}, icon_name={}",
+      &ide.ide_type, &icon_name
+    );
+    request_icon(&icon_name).or_else(|| {
+      let fallback_path = project.ide.fallback_icon_path.to_string_lossy().to_string();
 
-      // Query by WM class name
-      request_icon(&ide.icon_name)
-        // Query by WM class name converted into icon name
-        .or_else(|| request_icon(&project.ide.icon_name.replace("jetbrains-", "")))
-        // Query by fallback icon path
-        .or_else(|| request_icon(&project.ide.fallback_icon_path.to_string_lossy().to_string()))
-    }
+      debug!(
+        "Requesting fallback icon for {}, fallback_path={}",
+        &ide.ide_type, &fallback_path
+      );
+      request_icon(&fallback_path)
+    })
   }
 
   fn react(&mut self, event: Event, input: &mut rofi_mode::String) -> Action {
