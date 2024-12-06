@@ -14,7 +14,14 @@ pkgs.mkShell {
     (import ./. {inherit lib pkgs toolchain;})
   ];
 
+  shellHook = ''
+    if [ ! -d .direnv/rustup ]; then
+      ln -sf "${pkgs.rustup}" .direnv/rustup
+    fi
+  '';
+
   nativeBuildInputs = [
     (toolchain.withComponents ["cargo" "rustc" "rust-src" "clippy" "rustfmt"])
+    pkgs.rustup
   ];
 }
