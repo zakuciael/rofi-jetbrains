@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use amxml::dom::{new_document, NodePtr};
-use chrono::{DateTime, Local, NaiveDateTime};
+use chrono::{DateTime, Local};
 use resolve_path::PathResolveExt;
 use wax::{Glob, LinkBehavior, WalkEntry};
 
@@ -151,10 +151,10 @@ impl Iterator for RecentProjectsParser {
         .map(|raw| raw.parse::<i64>().ok())
         .and_then(|timestamp| {
           timestamp.map(|timestamp| {
-            NaiveDateTime::from_timestamp_millis(timestamp)
+            DateTime::from_timestamp_millis(timestamp)
               .as_ref()
-              .map(NaiveDateTime::and_utc)
-              .map(|utc| utc.with_timezone(&Local))
+              .map(DateTime::to_utc)
+              .map(|dt| dt.with_timezone(&Local))
           })
         })
         .flatten(),
