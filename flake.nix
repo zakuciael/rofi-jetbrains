@@ -39,8 +39,7 @@
       };
       toolchain = pkgs.fenix.stable;
     in rec {
-      devShell = import ./shell.nix {inherit lib pkgs toolchain;};
-      defaultPackage = packages.rofi-jetbrains;
+      devShells.default = import ./shell.nix {inherit lib pkgs toolchain;};
       packages = {
         default = packages.rofi-jetbrains;
         rofi-jetbrains = import ./. {inherit lib pkgs toolchain;};
