@@ -44,5 +44,24 @@
         default = packages.rofi-jetbrains;
         rofi-jetbrains = import ./. {inherit lib pkgs toolchain;};
       };
+      apps = let
+        mkRofiPackage = pkg:
+          if builtins.hasAttr "override" pkg
+          then pkg.override (old: {plugins = (old.plugins or []) ++ [packages.rofi-jetbrains];})
+          else pkg;
+      in {
+        default =
+          if builtins.getEnv "WAYLAND_DISPLAY" == ""
+          then apps.rofi
+          else apps.rofi-wayland;
+        rofi-wayland = {
+          type = "app";
+          program = "${lib.getExe (mkRofiPackage pkgs.rofi-wayland)}";
+        };
+        rofi = {
+          type = "app";
+          program = "${lib.getExe (mkRofiPackage pkgs.rofi)}";
+        };
+      };
     });
 }
