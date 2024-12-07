@@ -1,0 +1,52 @@
+[package]
+versioned_files = [
+    "Cargo.toml",
+    "Cargo.lock"
+]
+changelog = "CHANGELOG.md"
+
+[[package.assets]]
+path = "target/release/librofi_jetbrains.so"
+name = "jetbrains.so"
+
+[github]
+owner = "zakuciael"
+repo = "rofi-jetbrains"
+
+[[workflows]]
+name = "prepare-release"
+
+[[workflows.steps]]
+type = "Command"
+command = "git switch -c release"
+
+[[workflows.steps]]
+type = "PrepareRelease"
+ignore_conventional_commits = true
+
+[[workflows.steps]]
+type = "Command"
+command = "git commit -m \"chore(release): $version\""
+variables = { "$version" = "Version" }
+
+[[workflows.steps]]
+type = "Command"
+command = "git push --force --set-upstream origin release"
+
+[[workflows.steps]]
+type = "CreatePullRequest"
+base = "main"
+
+[workflows.steps.title]
+template = "chore(release): $version"
+variables = { "$version" = "Version" }
+
+[workflows.steps.body]
+template = "This PR was created by Knope. Merging it will create a new release\n\n$changelog"
+variables = { "$changelog" = "ChangelogEntry" }
+
+[[workflows]]
+name = "release"
+
+[[workflows.steps]]
+type = "Release"
