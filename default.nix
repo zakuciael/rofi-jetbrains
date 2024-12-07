@@ -6,6 +6,7 @@
     ];
   }),
   toolchain ? pkgs.fenix.stable,
+  rofi_next ? false,
   ...
 }: let
   rustPlatform = pkgs.makeRustPlatform {
@@ -20,7 +21,7 @@ in
     inherit (cargoToml.package) name version;
     pname = name;
 
-    RUSTFLAGS="--cfg rofi_next";
+    RUSTFLAGS = lib.optionalString rofi_next "--cfg rofi_next";
 
     nativeBuildInputs = with pkgs; [
       pkg-config

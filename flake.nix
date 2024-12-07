@@ -27,36 +27,42 @@
       perSystem = {
         pkgs,
         system,
+        toolchain,
         ...
       }: let
         lib = nixpkgs.lib;
       in rec {
-        _module.args.pkgs = import nixpkgs {
-          inherit system;
-          config = {};
-          overlays = [fenix.overlays.default];
+        _module.args = {
+          pkgs = import nixpkgs {
+            inherit system;
+            config = {};
+            overlays = [fenix.overlays.default];
+          };
+          toolchain = pkgs.fenix.stable;
         };
 
         packages = {
           default = packages.rofi-jetbrains;
           rofi-jetbrains = import ./. {
-            inherit lib pkgs;
-            toolchain = pkgs.fenix.stable;
+            inherit lib pkgs toolchain;
+          };
+          rofi-jetbrains-next = import ./. {
+            inherit lib pkgs toolchain;
+            rofi_next = true;
           };
         };
 
         devShells = {
           default = import ./shell.nix {
-            inherit lib pkgs;
-            toolchain = pkgs.fenix.stable;
+            inherit lib pkgs toolchain;
           };
         };
 
         apps = let
-          mkRofiPackage = pkg:
-            if builtins.hasAttr "override" pkg
-            then pkg.override (old: {plugins = (old.plugins or []) ++ [packages.rofi-jetbrains];})
-            else pkg;
+          mkRofiPackage = rofi: plugin:
+            if builtins.hasAttr "override" rofi
+            then rofi.override (old: {plugins = (old.plugins or []) ++ [plugin];})
+            else rofi;
         in {
           default =
             if builtins.getEnv "WAYLAND_DISPLAY" == ""
@@ -64,12 +70,12 @@
             else apps.rofi-wayland;
           rofi-wayland = {
             type = "app";
-            program = "${lib.getExe (mkRofiPackage pkgs.rofi-wayland)}";
+            program = "${lib.getExe (mkRofiPackage pkgs.rofi-wayland packages.rofi-jetbrains-next)}";
             meta.description = "rofi-wayland cli with the `rofi-jetbrains` plugin pre-installed";
           };
           rofi = {
             type = "app";
-            program = "${lib.getExe (mkRofiPackage pkgs.rofi)}";
+            program = "${lib.getExe (mkRofiPackage pkgs.rofi packages.rofi-jetbrains)}";
             meta.description = "rofi cli with the `rofi-jetbrains` plugin pre-installed";
           };
         };
