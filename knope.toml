@@ -15,6 +15,7 @@ repo = "rofi-jetbrains"
 
 [[workflows]]
 name = "prepare-release"
+help_text = "Generates a release PR for the new version of the project"
 
 [[workflows.steps]]
 type = "Command"
@@ -47,6 +48,23 @@ variables = { "$changelog" = "ChangelogEntry" }
 
 [[workflows]]
 name = "release"
+help_text = "Generate a GitHub release of the project"
 
 [[workflows.steps]]
 type = "Release"
+
+[[workflows]]
+name = "change"
+help_text = "Generate a new changeset file"
+
+[[workflows.steps]]
+type = "CreateChangeFile"
+
+[[workflows]]
+name = "version"
+help_text = "Get the current version of the project"
+
+[[workflows.steps]]
+type = "Command"
+command = "echo $version"
+variables = { "$version" = "Version" }
