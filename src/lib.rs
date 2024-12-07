@@ -75,9 +75,9 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
     aliases.extend(predefined_custom_aliases);
     aliases.extend(config.custom_aliases.iter().cloned());
 
-    debug!("Searching for installed IDEs..");
+    debug!("Searching for installed IDEs...");
     let glob = Glob::new(PRODUCT_INFO_GLOB_PATTERN)
-      .map_to_error_log("Failed to setup glob matcher for IDE product info")?;
+      .map_to_error_log("Failed to set up glob matcher for IDE product info")?;
 
     debug!("Looking for \"idea.properties\" under the user's home directory..");
     let home_properties = IDEProperties::from_file("~/idea.properties".resolve());
@@ -123,12 +123,12 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
       .map(Arc::new)
       .collect::<Vec<_>>();
 
-    debug!("Searching for recent project..");
+    debug!("Searching for recent projects...");
     let mut projects = vec![];
 
     for ide in ides.iter() {
       let glob = Glob::new(RECENT_PROJECTS_GLOB_PATTERN).map_to_error_log(format!(
-        "Failed to setup glob matcher for recent projects, {:?} is an invalid path",
+        "Failed to set up glob matcher for recent projects, {:?} is an invalid path",
         &ide.config_path
       ))?;
 

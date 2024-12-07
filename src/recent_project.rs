@@ -45,7 +45,7 @@ pub struct RecentProjectsParser {
 
 impl PartialEq for RecentProject {
   fn eq(&self, other: &Self) -> bool {
-    // We can ignore "name", "icon" as it should be always evaluated to the same value given the same project path
+    // We can ignore "name", "icon" as it should always be evaluated to the same value given the same project path
     // Also don't compare the "last_opened" prop as it might vary between entries for the same project
     // Instead let's update the value to the most recent timestamp
     self.path == other.path && self.ide.ide_type == other.ide.ide_type
@@ -64,7 +64,8 @@ impl Hash for RecentProject {
 
 impl RecentProjectsParser {
   pub fn from_file<T: AsRef<Path>>(path: T, ide: Arc<IDEData>) -> Result<RecentProjectsParser, ()> {
-    let xml = read_to_string(path).map_to_error_log("Failed to read recent projects XML file")?;
+    let xml =
+      read_to_string(path).map_to_error_log("Failed to read the recent projects XML file")?;
     let document =
       new_document(&xml).map_to_error_log("Failed to parse recent projects XML file")?;
     let root = document.root_element();
@@ -113,7 +114,7 @@ impl Iterator for RecentProjectsParser {
 
       ensure_option!(
         value,
-        "Failed to resolve project path from XML node: {raw_node:?}"
+        "Failed to resolve the project path from XML node: {raw_node:?}"
       )
     };
 
@@ -121,7 +122,7 @@ impl Iterator for RecentProjectsParser {
     match path.try_exists() {
       Ok(false) => {
         return Some(Err(format!(
-          "Ignoring XML node {raw_node:?}, path doesn't exists"
+          "Ignoring XML node {raw_node:?}, the path doesn't exists"
         )));
       }
       Err(_) => {
