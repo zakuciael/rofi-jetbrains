@@ -218,6 +218,7 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
       Event::Ok { selected, .. } => {
         let project = &self.entries[selected];
 
+        #[allow(clippy::zombie_processes)]
         Command::new(&project.ide.launcher_path)
           .arg(&project.path)
           .stdout(process::Stdio::null())

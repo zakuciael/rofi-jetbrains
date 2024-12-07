@@ -11,6 +11,7 @@ use crate::ide::IDEType;
 
 struct IDEVisitor;
 
+#[allow(clippy::needless_lifetimes)]
 impl<'de> Visitor<'de> for IDEVisitor {
   type Value = IDEType;
 

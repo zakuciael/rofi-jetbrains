@@ -4,6 +4,7 @@ use crate::ide::product_info::IDEProductInfo;
 use crate::ide::IDEType;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct IDEData {
   pub ide_type: IDEType,
   pub version: String,

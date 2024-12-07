@@ -17,6 +17,7 @@ pub struct IDELaunchSettings {
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct IDEProductInfo {
   pub name: String,
   pub version: String,
