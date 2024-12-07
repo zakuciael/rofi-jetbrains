@@ -30,9 +30,9 @@ impl IDEData {
     let launch_settings = &product_info.launch_settings[0];
 
     Self {
+      config_path: config_path.to_path_buf(),
       ide_type: product_info.ide_type.clone(),
       version: product_info.version.clone(),
-      config_path: config_path.join(&product_info.data_directory_name),
       fallback_icon_path: install_dir.join(&product_info.svg_icon_path),
       icon_name: launch_settings.startup_wm_class.clone(),
       launcher_path: install_dir.join(&launch_settings.launcher_path),

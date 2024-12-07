@@ -79,13 +79,6 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
     let glob = Glob::new(PRODUCT_INFO_GLOB_PATTERN)
       .map_to_error_log("Failed to set up glob matcher for IDE product info")?;
 
-    debug!("Looking for \"idea.properties\" under the user's home directory..");
-    let home_properties = IDEProperties::from_file("~/idea.properties".resolve());
-
-    if home_properties.is_none() {
-      debug!("File was not found, skipping..");
-    }
-
     let ides = glob
       .walk_with_behavior(&config.install_dir, LinkBehavior::ReadTarget)
       .flatten()
@@ -97,12 +90,20 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
           &entry
         ))?;
         let product_info = IDEProductInfo::from_file(&entry)?;
-        let config_path = home_properties
-          .as_ref()
-          .and_then(|props| props.config_path.clone())
-          .or_else(|| {
-            IDEProperties::from_file(install_dir.join("bin/idea.properties"))
-              .and_then(|props| props.config_path)
+
+        debug!(
+          "Looking for \"idea.properties\" file in {:?}...",
+          install_dir.join("bin/")
+        );
+        let config_path = IDEProperties::from_file(install_dir.join("bin/idea.properties"))
+          .and_then(|props| {
+            debug!("Properties file found, checking for config path setting...");
+
+            if props.config_path.is_none() {
+              debug!("Config path setting not found, using default...");
+            }
+
+            props.config_path
           })
           .unwrap_or_else(|| {
             (if product_info.ide_type == IDEType::AndroidStudio {
@@ -112,7 +113,10 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
             })
             .resolve()
             .to_path_buf()
+            .join(&product_info.data_directory_name)
           });
+
+        debug!("Using {:?} as the config path.", &config_path);
 
         Ok(IDEData::from_product_info(
           &product_info,
@@ -131,6 +135,10 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
         "Failed to set up glob matcher for recent projects, {:?} is an invalid path",
         &ide.config_path
       ))?;
+      debug!(
+        "Looking for recent projects in {:?} directory...",
+        &ide.config_path
+      );
 
       projects.extend(
         glob
