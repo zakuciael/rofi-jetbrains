@@ -1,2 +1,5 @@
 [build]
 rustflags = ["--cfg", "rofi_next"]
+
+[profile.dev.build-override]
+debug = false

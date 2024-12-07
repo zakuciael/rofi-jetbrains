@@ -9,53 +9,49 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
+    crane.url = "github:ipetkov/crane";
     fenix = {
       url = "github:nix-community/fenix";
       inputs.nixpkgs.follows = "nixpkgs";
+      inputs.rust-analyzer-src.follows = "";
     };
   };
 
-  outputs = {
-    nixpkgs,
-    flake-parts,
-    fenix,
-    ...
-  } @ inputs:
+  outputs = {flake-parts, ...} @ inputs:
     flake-parts.lib.mkFlake {inherit inputs;} {
       systems = ["x86_64-linux" "aarch64-linux" "i686-linux"];
+
+      debug = true;
 
       perSystem = {
         pkgs,
         system,
-        toolchain,
+        crane,
         ...
-      }: let
-        lib = nixpkgs.lib;
-      in rec {
+      }: rec {
         _module.args = {
-          pkgs = import nixpkgs {
+          pkgs = import inputs.nixpkgs {
             inherit system;
             config = {};
-            overlays = [fenix.overlays.default];
+            overlays = [inputs.fenix.overlays.default];
           };
-          toolchain = pkgs.fenix.stable;
+          crane =
+            (inputs.crane.mkLib pkgs).overrideToolchain
+            (pkgs': (pkgs'.fenix.stable.withComponents ["cargo" "rustc" "rust-src" "clippy" "rustfmt"]));
         };
 
         packages = {
           default = packages.rofi-jetbrains;
-          rofi-jetbrains = import ./. {
-            inherit lib pkgs toolchain;
-          };
-          rofi-jetbrains-next = import ./. {
-            inherit lib pkgs toolchain;
+
+          rofi-jetbrains = pkgs.callPackage ./. {inherit crane;};
+          rofi-jetbrains-next = pkgs.callPackage ./. {
+            inherit crane;
             rofi_next = true;
           };
         };
 
         devShells = {
-          default = import ./shell.nix {
-            inherit lib pkgs toolchain;
-          };
+          default = pkgs.callPackage ./shell.nix {inherit crane;};
         };
 
         apps = let
@@ -70,12 +66,12 @@
             else apps.rofi-wayland;
           rofi-wayland = {
             type = "app";
-            program = "${lib.getExe (mkRofiPackage pkgs.rofi-wayland packages.rofi-jetbrains-next)}";
+            program = "${mkRofiPackage pkgs.rofi-wayland packages.rofi-jetbrains-next}/bin/rofi";
             meta.description = "rofi-wayland cli with the `rofi-jetbrains` plugin pre-installed";
           };
           rofi = {
             type = "app";
-            program = "${lib.getExe (mkRofiPackage pkgs.rofi packages.rofi-jetbrains)}";
+            program = "${mkRofiPackage pkgs.rofi packages.rofi-jetbrains}/bin/rofi";
             meta.description = "rofi cli with the `rofi-jetbrains` plugin pre-installed";
           };
         };

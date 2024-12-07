@@ -1,51 +1,83 @@
 {
-  lib ? pkgs.lib,
-  pkgs ? (import <nixpkgs> {
-    overlays = [
-      (import "${fetchTarball "https://github.com/nix-community/fenix/archive/main.tar.gz"}/overlay.nix")
-    ];
-  }),
-  toolchain ? pkgs.fenix.stable,
+  lib,
+  crane,
+  pkg-config,
+  glib,
+  gtk3,
+  jq,
   rofi_next ? false,
   ...
 }: let
-  rustPlatform = pkgs.makeRustPlatform {
-    cargo = toolchain.cargo;
-    rustc = toolchain.rustc;
-  };
-  cargoToml = lib.importTOML ./Cargo.toml;
-  srcFileName = ''lib${builtins.replaceStrings ["-"] ["_"] cargoToml.package.name}.so'';
-  outFileName = "jetbrains.so";
-in
-  rustPlatform.buildRustPackage rec {
-    inherit (cargoToml.package) name version;
-    pname = name;
+  commonArgs = {
+    src = crane.cleanCargoSource ./.;
+    strictDeps = true;
 
-    RUSTFLAGS = lib.optionalString rofi_next "--cfg rofi_next";
-
-    nativeBuildInputs = with pkgs; [
+    nativeBuildInputs = [
       pkg-config
     ];
 
-    buildInputs = with pkgs; [
+    buildInputs = [
       glib.dev
       gtk3.dev
     ];
+  };
+in
+  crane.buildPackage (commonArgs
+    // {
+      cargoArtifacts = crane.buildDepsOnly commonArgs;
 
-    postInstall = ''
-      mkdir -p $out/lib/rofi
-      mv $out/lib/${srcFileName} $out/lib/rofi/${outFileName}
-    '';
+      RUSTFLAGS = lib.optionalString rofi_next "--cfg rofi_next";
 
-    doCheck = false;
-    cargoLock.lockFile = ./Cargo.lock;
-    src = ./.;
+      installPhaseCommand = ''
+        function installRofiPluginFromCargoBuildLog() {
+        	local dest=''${1:-''${out}}
+        	local log=''${2:-''${cargoBuildLog:?not defined}}
 
-    meta = with lib; {
-      description = "A rofi plugin that adds the ability to launch recent projects in JetBrains IDEs";
-      homepage = "https://github.com/zakuciael/rofi-jetbrains";
-      license = licenses.mit;
-      maintainers = with maintainers; [zakuciael];
-      platforms = platforms.linux;
-    };
-  }
+        	if ! [ -f "''${log}" ]; then
+        		echo "unable to install plugin, cargo build log does not exist at: ''${log}"
+        		false
+        	fi
+
+        	echo "searching for plugin files to install from cargo build log at ''${log}"
+        	echo "jq: ${lib.getExe jq}"
+
+        	local logs
+        	logs=$(${lib.getExe jq} -R 'fromjson?' <"''${log}")
+
+        	local select_non_deps_artifact='select(contains("/deps/artifact/") | not)'
+        	local members="$(command cargo metadata --format-version 1 | ${lib.getExe jq} -c '.workspace_members')"
+        	local select_non_test_members='select(.reason == "compiler-artifact" and .profile.test == false)
+          	| select(.package_id as $pid
+              | '"''${members}"'
+              | contains([$pid])
+            )'
+        	local select_lib_files="''${select_non_test_members}"'
+            | select(.target.kind
+                | contains(["cdylib"])
+                or contains(["dylib"])
+                or contains(["staticlib"])
+            )
+            | .filenames[]
+            | select(endswith(".rlib") | not)
+            | '"''${select_non_deps_artifact}"
+
+          function installArtifacts() {
+          	local loc=''${1?:missing}
+          	mkdir -p "''${loc}"
+
+          	while IFS= read -r to_install; do
+          		echo "installing ''${to_install}"
+          		cp "''${to_install}" "''${loc}"
+          	done
+
+          	rmdir --ignore-fail-on-non-empty "''${loc}"
+          }
+
+          echo "''${logs}" | ${lib.getExe jq} -r "''${select_lib_files}" | installArtifacts "''${dest}/lib/rofi"
+
+          echo "installation complete"
+        }
+
+        installRofiPluginFromCargoBuildLog "$out" "$cargoBuildLog"
+      '';
+    })
