@@ -1,0 +1,88 @@
+name: Continuous Deployment
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    types: [ closed ]
+    branches: [ main ]
+
+jobs:
+  build-artifacts:
+    name: Build artifacts
+    if: github.event_name == 'pull_request' && github.head_ref == 'release' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Install rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+      - name: Install required system dependencies
+        run: sudo apt-get install -y libpango1.0-dev
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v16
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up cachix
+        uses: cachix/cachix-action@v15
+        with:
+          name: rofi-jetbrains
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+      - name: Build
+        run: cargo build --release --locked
+      - name: Build nix packages
+        run: |
+          nix build .#rofi-jetbrains
+          nix build .#rofi-jetbrains-next
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4.4.3
+        with:
+          name: "jetbrains.so"
+          path: "target/release/librofi_jetbrains.so"
+          if-no-files-found: error
+  release:
+    name: Create release
+    if: github.event_name == 'pull_request' && github.head_ref == 'release' && github.event.pull_request.merged == true
+    needs: [ build-artifacts ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4.1.8
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Install knope CLI
+        uses: knope-dev/action@v2.1.0
+        with:
+          version: 0.18.1
+      - name: Create release
+        run: knope release --verbose
+        continue-on-error: true
+  prepare-release:
+    name: Prepare release
+    if: github.event_name == 'push' && !contains(github.event.head_commit.message, 'chore(release):')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Configure git
+        run: |
+          git config --global user.name GitHub Actions
+          git config --global user.email github-actions@github.com
+      - name: Install knope CLI
+        uses: knope-dev/action@v2.1.0
+        with:
+          version: 0.18.1
+      - name: Prepare release
+        run: knope prepare-release --verbose
+        continue-on-error: true
