@@ -4,6 +4,11 @@ versioned_files = [
     "Cargo.lock"
 ]
 changelog = "CHANGELOG.md"
+extra_changelog_sections = [
+    { types = ["major"], name = "Major Changes" },
+    { types = ["minor"], name = "Minor Changes" },
+    { types = ["patch"], name = "Patch Changes" },
+]
 
 [[package.assets]]
 path = "target/release/librofi_jetbrains.so"
