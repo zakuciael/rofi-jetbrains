@@ -1,6 +1,6 @@
 [package]
 name = "rofi-jetbrains"
-version = "2.0.0"
+version = "2.1.0"
 description = "A rofi plugin that adds the ability to launch recent projects in JetBrains IDEs"
 authors = ["Krzysztof Saczuk <me@krzysztofsaczuk.pl>"]
 edition = "2021"
