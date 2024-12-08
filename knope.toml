@@ -11,7 +11,7 @@ extra_changelog_sections = [
 ]
 
 [[package.assets]]
-path = "target/release/librofi_jetbrains.so"
+path = "artifacts/rofi_jetbrains.so"
 name = "jetbrains.so"
 
 [github]
