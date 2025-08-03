@@ -1,7 +1,7 @@
 name: Continuous Integration
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
 
 concurrency:
@@ -36,7 +36,7 @@ jobs:
       - name: Install required system dependencies
         run: sudo apt-get install -y libpango1.0-dev
       - name: Run clippy
-        uses: actions-rs/clippy-check@v1
+        uses: clechasseur/rs-clippy-check@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: -- -W warnings
@@ -54,3 +54,41 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Check repository
         run: nix flake check
+  populate-cache:
+    strategy:
+      matrix:
+        system:
+          - x86_64-linux
+          - aarch64-linux
+          - i686-linux
+        package:
+          - rofi-jetbrains.cargoArtifacts
+          - rofi-jetbrains
+          - rofi-jetbrains-next
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
+      - if: matrix.system == 'aarch64-linux'
+        name: Set up QEMU for aarch64 support
+        uses: docker/setup-qemu-action@v3
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: "${{ secrets.GITHUB_TOKEN }}"
+          extra_nix_config: |
+            ${{ matrix.system == 'aarch64-linux' && 'extra-platforms = aarch64-linux' || '' }}
+      - name: Install Attic and nix-fast-build
+        shell: bash
+        run: |
+          nix profile install nixpkgs#attic-client nixpkgs#nix-fast-build
+      - name: Configure Attic
+        shell: bash
+        run: |
+          attic login --set-default central "${{ vars.ATTIC_CACHE_URL }}" "${{ secrets.ATTIC_CACHE_TOKEN }}"
+          attic use "${{ vars.ATTIC_CACHE_NAME }}"
+      - name: Build package .#packages.${{ matrix.system }}.${{ matrix.package }}
+        continue-on-error: false
+        run: |
+          nix-fast-build --eval-workers 1 --skip-cached --no-nom --attic-cache="${{ vars.ATTIC_CACHE_NAME }}" --option build-fallback true \
+            -f .#packages.${{ matrix.system }}.${{ matrix.package }}

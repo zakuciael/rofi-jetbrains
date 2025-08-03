@@ -2,8 +2,8 @@
   description = "A rofi plugin that adds the ability to launch recent projects in JetBrains IDEs";
 
   nixConfig = {
-    extra-substituters = ["https://rofi-jetbrains.cachix.org"];
-    extra-trusted-public-keys = ["rofi-jetbrains.cachix.org-1:jCHjg5XBg0A17G5/n1QBD39fxbg++URiJCvEuC5cnCs="];
+    extra-substituters = [ "https://attic.zakku.eu/rofi-jetbrains" ];
+    extra-trusted-public-keys = [ "rofi-jetbrains:grO4wlkucWElNgkCaFREHgbsrn9jeoHZqyqEMRtcgxI=" ];
   };
 
   inputs = {
@@ -17,64 +17,81 @@
     };
   };
 
-  outputs = {flake-parts, ...} @ inputs:
-    flake-parts.lib.mkFlake {inherit inputs;} {
-      systems = ["x86_64-linux" "aarch64-linux" "i686-linux"];
+  outputs =
+    { flake-parts, ... }@inputs:
+    flake-parts.lib.mkFlake { inherit inputs; } {
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+        "i686-linux"
+      ];
 
       debug = true;
 
-      perSystem = {
-        pkgs,
-        system,
-        crane,
-        ...
-      }: rec {
-        _module.args = {
-          pkgs = import inputs.nixpkgs {
-            inherit system;
-            config = {};
-            overlays = [inputs.fenix.overlays.default];
+      perSystem =
+        {
+          pkgs,
+          system,
+          crane,
+          ...
+        }:
+        rec {
+          _module.args = {
+            pkgs = import inputs.nixpkgs {
+              inherit system;
+              config = { };
+              overlays = [ inputs.fenix.overlays.default ];
+            };
+            crane = (inputs.crane.mkLib pkgs).overrideToolchain (
+              pkgs':
+              (pkgs'.fenix.stable.withComponents [
+                "cargo"
+                "rustc"
+                "rust-src"
+                "clippy"
+                "rustfmt"
+              ])
+            );
           };
-          crane =
-            (inputs.crane.mkLib pkgs).overrideToolchain
-            (pkgs': (pkgs'.fenix.stable.withComponents ["cargo" "rustc" "rust-src" "clippy" "rustfmt"]));
-        };
 
-        packages = {
-          default = packages.rofi-jetbrains;
+          packages = {
+            default = packages.rofi-jetbrains;
 
-          rofi-jetbrains = pkgs.callPackage ./. {inherit crane;};
-          rofi-jetbrains-next = pkgs.callPackage ./. {
-            inherit crane;
-            rofi_next = true;
+            rofi-jetbrains = pkgs.callPackage ./. { inherit crane; };
+            rofi-jetbrains-next = pkgs.callPackage ./. {
+              inherit crane;
+              rofi_next = true;
+            };
           };
-        };
 
-        devShells = {
-          default = pkgs.callPackage ./shell.nix {inherit crane;};
-        };
+          devShells = {
+            default = pkgs.callPackage ./shell.nix { inherit crane; };
+          };
 
-        apps = let
-          mkRofiPackage = rofi: plugin:
-            if builtins.hasAttr "override" rofi
-            then rofi.override (old: {plugins = (old.plugins or []) ++ [plugin];})
-            else rofi;
-        in {
-          default =
-            if builtins.getEnv "WAYLAND_DISPLAY" == ""
-            then apps.rofi
-            else apps.rofi-wayland;
-          rofi-wayland = {
-            type = "app";
-            program = "${mkRofiPackage pkgs.rofi-wayland packages.rofi-jetbrains-next}/bin/rofi";
-            meta.description = "rofi-wayland cli with the `rofi-jetbrains` plugin pre-installed";
-          };
-          rofi = {
-            type = "app";
-            program = "${mkRofiPackage pkgs.rofi packages.rofi-jetbrains}/bin/rofi";
-            meta.description = "rofi cli with the `rofi-jetbrains` plugin pre-installed";
-          };
+          apps =
+            let
+              mkRofiPackage =
+                rofi: plugin:
+                if builtins.hasAttr "override" rofi then
+                  rofi.override (old: {
+                    plugins = old.plugins or [ ] ++ [ plugin ];
+                  })
+                else
+                  rofi;
+            in
+            {
+              default = if builtins.getEnv "WAYLAND_DISPLAY" == "" then apps.rofi else apps.rofi-wayland;
+              rofi-wayland = {
+                type = "app";
+                program = "${mkRofiPackage pkgs.rofi-wayland packages.rofi-jetbrains-next}/bin/rofi";
+                meta.description = "rofi-wayland cli with the `rofi-jetbrains` plugin pre-installed";
+              };
+              rofi = {
+                type = "app";
+                program = "${mkRofiPackage pkgs.rofi packages.rofi-jetbrains}/bin/rofi";
+                meta.description = "rofi cli with the `rofi-jetbrains` plugin pre-installed";
+              };
+            };
         };
-      };
     };
 }
