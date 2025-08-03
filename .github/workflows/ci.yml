@@ -55,6 +55,7 @@ jobs:
       - name: Check repository
         run: nix flake check
   populate-cache:
+    name: Populate cache (${{ matrix.system }}.${{ matrix.package }})
     strategy:
       matrix:
         system:
