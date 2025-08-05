@@ -36,7 +36,7 @@ static GLIB_LOGGER: GlibLogger =
   GlibLogger::new(GlibLoggerFormat::Plain, GlibLoggerDomain::CrateTarget);
 
 static RECENT_PROJECTS_GLOB_PATTERN: &str = "options/{recentProjects,recentSolutions}.xml";
-static PRODUCT_INFO_GLOB_PATTERN: &str = "**/product-info.json";
+static PRODUCT_INFO_GLOB_PATTERN: &str = "*/product-info.json";
 
 export_mode!(Mode<'_>);
 
