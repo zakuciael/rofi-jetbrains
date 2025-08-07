@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.1 (2025-08-07)
+
+### Patch Changes
+
+- Fixed build errors
+
 ## 2.2.0 (2025-08-07)
 
 ### Minor Changes
