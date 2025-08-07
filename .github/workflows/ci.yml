@@ -1,7 +1,7 @@
 name: Continuous Integration
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
 
 concurrency:
@@ -28,18 +28,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4.2.2
-      - name: Install rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-          components: clippy
       - name: Install required system dependencies
         run: sudo apt-get install -y libpango1.0-dev
       - name: Run clippy
         uses: clechasseur/rs-clippy-check@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: -- -W warnings
+          toolchain: stable
+          args: -- -D warnings
   flake:
     name: Flake check
     runs-on: ubuntu-latest
