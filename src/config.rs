@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use glib::{debug, warn};
+use glib::warn;
 use itertools::Itertools;
 use resolve_path::PathResolveExt;
 

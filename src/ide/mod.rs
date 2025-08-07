@@ -90,6 +90,6 @@ impl Display for IDEType {
       IDEType::MPS => "MPS",
     };
 
-    write!(f, "{}", name)
+    write!(f, "{name}")
   }
 }
