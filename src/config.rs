@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use glib::warn;
+use glib::{debug, warn};
 use itertools::Itertools;
 use resolve_path::PathResolveExt;
 
@@ -15,6 +15,7 @@ static ROFI_CONFIG_PREFIX: &str = "jetbrains-";
 pub struct Config {
   pub install_dir: PathBuf,
   pub custom_aliases: Vec<(String, IDEType)>,
+  pub use_clion_devshell: bool,
 }
 
 impl Config {
@@ -29,6 +30,11 @@ impl Config {
       "A rofi list declaring custom IDE aliases",
     )
     .unwrap_or_default();
+
+    let use_clion_devshell = config_parse_option::<bool>(
+      &(ROFI_CONFIG_PREFIX.to_owned() + "use-clion-devshell"),
+      "Whether to use the nix devshell when opening a CLion project",
+    );
 
     let custom_aliases = custom_aliases
       .into_iter()
@@ -64,6 +70,7 @@ impl Config {
           .to_path_buf()
       }),
       custom_aliases,
+      use_clion_devshell,
     }
   }
 }

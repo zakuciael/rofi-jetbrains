@@ -42,6 +42,7 @@ export_mode!(Mode<'_>);
 
 struct Mode<'rofi> {
   api: Api<'rofi>,
+  config: Config,
   projects: Vec<Arc<RecentProject>>,
   query: Option<IDEType>,
   entries: Vec<Arc<RecentProject>>,
@@ -184,6 +185,7 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
 
     Ok(Self {
       api,
+      config,
       projects,
       entries,
       aliases,
@@ -237,13 +239,36 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
     match event {
       Event::Ok { selected, .. } => {
         let project = &self.entries[selected];
+        let use_nix_devshell =
+          project.ide.ide_type == IDEType::CLion && self.config.use_clion_devshell;
+        let cmd = if use_nix_devshell {
+          "nix"
+        } else {
+          &project.ide.launcher_path.to_string_lossy()
+        };
+        let args = if use_nix_devshell {
+          vec![
+            "develop".to_string(),
+            "-c".to_string(),
+            project.ide.launcher_path.to_string_lossy().into_owned(),
+            project.path.to_string_lossy().into_owned(),
+          ]
+        } else {
+          vec![project.path.to_string_lossy().into_owned()]
+        };
 
-        #[allow(clippy::zombie_processes)]
-        Command::new(&project.ide.launcher_path)
-          .arg(&project.path)
+        let mut cmd = Command::new(cmd);
+        cmd
+          .args(args)
+          .current_dir(&project.path)
           .stdout(process::Stdio::null())
           .stderr(process::Stdio::null())
-          .process_group(0)
+          .process_group(0);
+
+        debug!("Executing command/s: {:?}", cmd);
+
+        #[allow(clippy::zombie_processes)]
+        cmd
           .spawn()
           .map_to_error_log(format!(
             "Failed to spawn IDE with the project: {:?}",
