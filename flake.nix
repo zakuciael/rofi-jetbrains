@@ -88,7 +88,7 @@
               };
               rofi = {
                 type = "app";
-                program = "${mkRofiPackage pkgs.rofi packages.rofi-jetbrains}/bin/rofi";
+                program = "${mkRofiPackage pkgs.rofi packages.rofi-jetbrains-next}/bin/rofi";
                 meta.description = "rofi cli with the `rofi-jetbrains` plugin pre-installed";
               };
             };
