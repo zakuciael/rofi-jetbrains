@@ -7,6 +7,7 @@ use std::sync::Arc;
 use glib::{debug, warn, GlibLogger, GlibLoggerDomain, GlibLoggerFormat};
 use itertools::Itertools;
 use log::LevelFilter;
+use rayon::prelude::*;
 use resolve_path::PathResolveExt;
 use rofi_mode::cairo::Surface;
 use rofi_mode::{export_mode, Action, Api, Event, Matcher};
@@ -35,7 +36,7 @@ static GLIB_LOGGER: GlibLogger =
   GlibLogger::new(GlibLoggerFormat::Plain, GlibLoggerDomain::CrateTarget);
 
 static RECENT_PROJECTS_GLOB_PATTERN: &str = "options/{recentProjects,recentSolutions}.xml";
-static PRODUCT_INFO_GLOB_PATTERN: &str = "**/product-info.json";
+static PRODUCT_INFO_GLOB_PATTERN: &str = "*/product-info.json";
 
 export_mode!(Mode<'_>);
 
@@ -79,17 +80,16 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
     let glob = Glob::new(PRODUCT_INFO_GLOB_PATTERN)
       .map_to_error_log("Failed to set up glob matcher for IDE product info")?;
 
-    let ides = glob
+    let ides: Vec<_> = glob
       .walk_with_behavior(&config.install_dir, LinkBehavior::ReadTarget)
-      .flatten()
+      .collect::<Result<Vec<_>, _>>()
+      .map_to_error_log("Failed to collect IDE paths")?
+      .into_par_iter()
       .map(WalkEntry::into_path)
-      .flat_map(|entry| -> Result<_, ()> {
+      .filter_map(|entry| -> Option<Arc<IDEData>> {
         debug!("Parsing IDE data from {:?} file", &entry);
-        let install_dir = entry.parent().map_to_error_log(format!(
-          "Failed to resolve the parent directory for {:?} file ",
-          &entry
-        ))?;
-        let product_info = IDEProductInfo::from_file(&entry)?;
+        let install_dir = entry.parent()?;
+        let product_info = IDEProductInfo::from_file(&entry).ok()?;
 
         debug!(
           "Looking for \"idea.properties\" file in {:?}...",
@@ -118,57 +118,69 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
 
         debug!("Using {:?} as the config path.", &config_path);
 
-        Ok(IDEData::from_product_info(
+        Some(Arc::new(IDEData::from_product_info(
           &product_info,
           install_dir,
           config_path,
-        ))
+        )))
       })
-      .map(Arc::new)
-      .collect::<Vec<_>>();
+      .collect();
 
     debug!("Searching for recent projects...");
-    let mut projects = vec![];
+    let projects: Vec<_> = ides
+      .par_iter()
+      .map(|ide| {
+        let glob = Glob::new(RECENT_PROJECTS_GLOB_PATTERN).map_to_error_log(format!(
+          "Failed to set up glob matcher for recent projects, {:?} is an invalid path",
+          &ide.config_path
+        ))?;
+        debug!(
+          "Looking for recent projects in {:?} directory...",
+          &ide.config_path
+        );
 
-    for ide in ides.iter() {
-      let glob = Glob::new(RECENT_PROJECTS_GLOB_PATTERN).map_to_error_log(format!(
-        "Failed to set up glob matcher for recent projects, {:?} is an invalid path",
-        &ide.config_path
-      ))?;
-      debug!(
-        "Looking for recent projects in {:?} directory...",
-        &ide.config_path
-      );
-
-      projects.extend(
-        glob
+        // Collect file paths first (can be parallelized)
+        let xml_files: Vec<_> = glob
           .walk_with_behavior(&ide.config_path, LinkBehavior::ReadTarget)
-          .flatten()
+          .collect::<Result<Vec<_>, _>>()
+          .map_to_error_log("Failed to collect recent project files")?
+          .into_par_iter()
           .map(WalkEntry::into_path)
-          .flat_map(|entry| {
+          .collect();
+
+        // Process XML files sequentially (due to NodePtr not being Send)
+        let ide_projects: Vec<RecentProject> = xml_files
+          .into_iter()
+          .filter_map(|entry| {
             debug!("Reading recent projects XML file {entry:?}..");
-            RecentProjectsParser::from_file(entry, ide.clone())
+            RecentProjectsParser::from_file(entry, ide.clone()).ok()
           })
           .flatten()
           .filter_map(|result| match result {
-            // Log errors returned by the RecentProjectsParser's iterator and skip those entries
             Ok(v) => Some(v),
             Err(err) => {
               warn!("{}", err);
               None
             }
-          }),
-      );
-    }
+          })
+          .collect();
+
+        Ok::<Vec<RecentProject>, ()>(ide_projects)
+      })
+      .filter_map(|result| result.ok())
+      .flatten()
+      .collect();
 
     let projects = projects
+      .into_par_iter()
+      .map(Arc::new)
+      .collect::<Vec<_>>()
       .into_iter()
       .sorted_by(|a, b| Ord::cmp(&b.last_opened, &a.last_opened))
       .unique()
-      .map(Arc::new)
       .collect::<Vec<_>>();
 
-    let entries = projects.iter().map(Arc::clone).collect::<Vec<_>>();
+    let entries = projects.par_iter().map(Arc::clone).collect::<Vec<_>>();
 
     Ok(Self {
       api,

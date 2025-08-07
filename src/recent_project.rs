@@ -70,6 +70,7 @@ impl RecentProjectsParser {
       new_document(&xml).map_to_error_log("Failed to parse recent projects XML file")?;
     let root = document.root_element();
 
+    // Keep this sequential due to NodePtr not being Send
     let nodes = BASE_PATHS
       .iter()
       .filter_map(|base_path| root.get_first_node(base_path))
@@ -89,10 +90,7 @@ impl Iterator for RecentProjectsParser {
   type Item = Result<RecentProject, String>;
 
   fn next(&mut self) -> Option<Self::Item> {
-    let raw_node = match self.nodes.pop_front() {
-      Some(v) => v,
-      None => return None,
-    };
+    let raw_node = self.nodes.pop_front()?;
 
     let mut name: Option<String> = None;
 
