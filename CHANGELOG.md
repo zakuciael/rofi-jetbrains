@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.2.0 (2025-08-07)
+
+### Minor Changes
+
+- Add option to use `nix devshell` in CLion projects
+
+### Patch Changes
+
+- Improve plugin load times
+
 ## 2.1.0 (2024-12-08)
 
 ### Minor Changes
