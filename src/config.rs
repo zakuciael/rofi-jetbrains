@@ -35,13 +35,13 @@ impl Config {
       let clion_devshell = config_parse_option::<bool>(
         &(ROFI_CONFIG_PREFIX.to_owned() + "use-clion-devshell"),
         r#"
-      Deprecated: use 'use-direnv' option instead.
+      Deprecated: use the 'jetbrains-use-direnv' option instead.
       Whether to use a nix devshell when opening a CLion project
       "#,
       );
 
       if clion_devshell {
-        warn!("'use-clion-devshell' option is deprecated, use 'use-direnv' instead.");
+        warn!("'jetbrains-use-clion-devshell' option is deprecated, use 'jetbrains-use-direnv' option instead.");
         clion_devshell
       } else {
         config_parse_option::<bool>(
