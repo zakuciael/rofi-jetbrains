@@ -15,7 +15,7 @@ static ROFI_CONFIG_PREFIX: &str = "jetbrains-";
 pub struct Config {
   pub install_dir: PathBuf,
   pub custom_aliases: Vec<(String, IDEType)>,
-  pub use_clion_devshell: bool,
+  pub use_direnv: bool,
 }
 
 impl Config {
@@ -31,10 +31,25 @@ impl Config {
     )
     .unwrap_or_default();
 
-    let use_clion_devshell = config_parse_option::<bool>(
-      &(ROFI_CONFIG_PREFIX.to_owned() + "use-clion-devshell"),
-      "Whether to use the nix devshell when opening a CLion project",
-    );
+    let use_direnv = {
+      let clion_devshell = config_parse_option::<bool>(
+        &(ROFI_CONFIG_PREFIX.to_owned() + "use-clion-devshell"),
+        r#"
+      Deprecated: use 'use-direnv' option instead.
+      Whether to use a nix devshell when opening a CLion project
+      "#,
+      );
+
+      if clion_devshell {
+        warn!("'use-clion-devshell' option is deprecated, use 'use-direnv' instead.");
+        clion_devshell
+      } else {
+        config_parse_option::<bool>(
+          &(ROFI_CONFIG_PREFIX.to_owned() + "use-direnv"),
+          "Whether to enter a direnv shell before opening a project",
+        )
+      }
+    };
 
     let custom_aliases = custom_aliases
       .into_iter()
@@ -70,7 +85,7 @@ impl Config {
           .to_path_buf()
       }),
       custom_aliases,
-      use_clion_devshell,
+      use_direnv,
     }
   }
 }

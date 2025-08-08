@@ -1,16 +1,16 @@
-use std::collections::HashMap;
-use std::os::unix::process::CommandExt;
-use std::process;
-use std::process::Command;
-use std::sync::Arc;
-
-use glib::{debug, warn, GlibLogger, GlibLoggerDomain, GlibLoggerFormat};
+use direnv::AllowedStatus;
+use glib::{debug, error, warn, GlibLogger, GlibLoggerDomain, GlibLoggerFormat};
 use itertools::Itertools;
 use log::LevelFilter;
 use rayon::prelude::*;
 use resolve_path::PathResolveExt;
 use rofi_mode::cairo::Surface;
 use rofi_mode::{export_mode, Action, Api, Event, Matcher};
+use std::collections::HashMap;
+use std::os::unix::process::CommandExt;
+use std::process;
+use std::process::{exit, Command};
+use std::sync::Arc;
 use strum::IntoEnumIterator;
 use wax::{Glob, LinkBehavior, WalkEntry};
 
@@ -21,7 +21,7 @@ use crate::ide::properties::IDEProperties;
 use crate::ide::IDEType;
 use crate::macros::wrap_icon_request;
 use crate::recent_project::{RecentProject, RecentProjectsParser};
-use crate::traits::MapToErrorLog;
+use crate::traits::{MapToErrorLog, MapToErrorLogAndExit};
 
 mod config;
 mod ide;
@@ -239,22 +239,44 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
     match event {
       Event::Ok { selected, .. } => {
         let project = &self.entries[selected];
-        let use_nix_devshell =
-          project.ide.ide_type == IDEType::CLion && self.config.use_clion_devshell;
-        let cmd = if use_nix_devshell {
-          "nix"
+        let default_cmd = project.ide.launcher_path.to_string_lossy().into_owned();
+        let default_args = vec![project.path.to_string_lossy().into_owned()];
+
+        let (cmd, args) = if self.config.use_direnv {
+          // value returned by this can be `true` only if `rc` is found and allowed.
+          let (direnv, rc_found) = {
+            let direnv = direnv::DirenvInstall::detect()
+              .map_to_error_log_and_exit("Could not find direnv installed on the system");
+
+            let state = direnv
+              .status(&project.path)
+              .map_to_error_log_and_exit(
+                "Unsupported direnv version, please upgrade to v2.33.0 or newer",
+              )
+              .state;
+
+            (direnv.bin_path, state.is_allowed())
+          };
+
+          if rc_found {
+            let project_path = project.path.to_string_lossy().into_owned();
+            let ide_path = project.ide.launcher_path.to_string_lossy().into_owned();
+
+            (
+              direnv.to_string_lossy().into_owned(),
+              vec![
+                "exec".to_string(),
+                project_path.clone(),
+                ide_path,
+                project_path,
+              ],
+            )
+          } else {
+            warn!("direnv rc was not found or was not allowed to execute, falling back to default");
+            (default_cmd, default_args)
+          }
         } else {
-          &project.ide.launcher_path.to_string_lossy()
-        };
-        let args = if use_nix_devshell {
-          vec![
-            "develop".to_string(),
-            "-c".to_string(),
-            project.ide.launcher_path.to_string_lossy().into_owned(),
-            project.path.to_string_lossy().into_owned(),
-          ]
-        } else {
-          vec![project.path.to_string_lossy().into_owned()]
+          (default_cmd, default_args)
         };
 
         let mut cmd = Command::new(cmd);

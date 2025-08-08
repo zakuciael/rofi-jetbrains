@@ -18,6 +18,7 @@ strip = true
 [dependencies]
 amxml = "0.5.3"
 chrono = "0.4.31"
+direnv = "0.1.1"
 dirs = "5.0.1"
 glib = { version = "0.19.6", features = ["log_macros"] }
 itertools = "0.12.1"
