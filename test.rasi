@@ -3,5 +3,5 @@ configuration {
     show-icons: true;
     jetbrains-custom-aliases: ["web:WS", "cpp:CL"];
     jetbrains-install-dir: "~/.local/share/JetBrains/Toolbox/apps/";
-    jetbrains-use-clion-devshell: true;
+    jetbrains-use-direnv: true;
 }
