@@ -1,5 +1,4 @@
-use direnv::AllowedStatus;
-use glib::{debug, error, warn, GlibLogger, GlibLoggerDomain, GlibLoggerFormat};
+use glib::{debug, warn, GlibLogger, GlibLoggerDomain, GlibLoggerFormat};
 use itertools::Itertools;
 use log::LevelFilter;
 use rayon::prelude::*;
@@ -9,7 +8,7 @@ use rofi_mode::{export_mode, Action, Api, Event, Matcher};
 use std::collections::HashMap;
 use std::os::unix::process::CommandExt;
 use std::process;
-use std::process::{exit, Command};
+use std::process::Command;
 use std::sync::Arc;
 use strum::IntoEnumIterator;
 use wax::{Glob, LinkBehavior, WalkEntry};
