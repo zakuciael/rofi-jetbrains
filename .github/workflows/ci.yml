@@ -1,7 +1,7 @@
 name: Continuous Integration
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
 
 concurrency:
@@ -29,7 +29,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4.2.2
       - name: Install required system dependencies
-        run: sudo apt-get install -y libpango1.0-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpango1.0-dev
       - name: Run clippy
         uses: clechasseur/rs-clippy-check@v4
         with:
@@ -46,7 +48,9 @@ jobs:
         with:
           toolchain: stable
       - name: Install required system dependencies
-        run: sudo apt-get install -y libpango1.0-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpango1.0-dev
       - name: Build
         run: cargo build --release --locked
   flake:
