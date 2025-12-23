@@ -240,6 +240,14 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
         let project = &self.entries[selected];
         let default_cmd = project.ide.launcher_path.to_string_lossy().into_owned();
         let default_args = vec![project.path.to_string_lossy().into_owned()];
+        let project_dir = if project.path.is_file() {
+          project
+            .path
+            .parent()
+            .map_to_error_log_and_exit("Unable to resolve project path.")
+        } else {
+          project.path.as_path()
+        };
 
         let (cmd, args) = if self.config.use_direnv {
           // value returned by this can be `true` only if `rc` is found and allowed.
@@ -248,7 +256,7 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
               .map_to_error_log_and_exit("Could not find direnv installed on the system");
 
             let state = direnv
-              .status(&project.path)
+              .status(project_dir)
               .map(|v| v.state)
               .to_error_log_and_exit();
 
@@ -256,16 +264,17 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
           };
 
           if rc_found {
-            let project_path = project.path.to_string_lossy().into_owned();
+            // let project_path = project.path.to_string_lossy().into_owned();
             let ide_path = project.ide.launcher_path.to_string_lossy().into_owned();
 
             (
               direnv.to_string_lossy().into_owned(),
               vec![
                 "exec".to_string(),
-                project_path.clone(),
+                project_dir.to_string_lossy().into_owned(),
                 ide_path,
-                project_path,
+                // We don't use the `project_dir` here so that Rider project can be started by using either .csproj or .sln files.
+                project.path.to_string_lossy().into_owned(),
               ],
             )
           } else {
@@ -279,7 +288,7 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
         let mut cmd = Command::new(cmd);
         cmd
           .args(args)
-          .current_dir(&project.path)
+          .current_dir(project_dir)
           .stdout(process::Stdio::null())
           .stderr(process::Stdio::null())
           .process_group(0);
