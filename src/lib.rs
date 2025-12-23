@@ -20,7 +20,7 @@ use crate::ide::properties::IDEProperties;
 use crate::ide::IDEType;
 use crate::macros::wrap_icon_request;
 use crate::recent_project::{RecentProject, RecentProjectsParser};
-use crate::traits::{MapToErrorLog, MapToErrorLogAndExit};
+use crate::traits::{MapToErrorLog, MapToErrorLogAndExit, ToErrorLogAndExit};
 
 mod config;
 mod ide;
@@ -249,10 +249,8 @@ impl<'rofi> rofi_mode::Mode<'rofi> for Mode<'rofi> {
 
             let state = direnv
               .status(&project.path)
-              .map_to_error_log_and_exit(
-                "Unsupported direnv version, please upgrade to v2.33.0 or newer",
-              )
-              .state;
+              .map(|v| v.state)
+              .to_error_log_and_exit();
 
             (direnv.bin_path, state.is_allowed())
           };
